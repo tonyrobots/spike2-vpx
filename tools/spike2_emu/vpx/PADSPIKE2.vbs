@@ -143,10 +143,10 @@ Sub LoadVPM(VPMver, VBSfile, VBSver)
 	LoadCore
 	Set vpmShowDips = GetRef("padNoDips")
 	On Error Resume Next
-	Set Controller = CreateObject("PAD.Controller")
-	PadLog "CreateObject(PAD.Controller): err=" & Err.Number & " " & Err.Description & " IsObject=" & IsObject(Controller)
-	If Err Then MsgBox "Can't load PAD.Controller: register it with" & vbNewLine & _
-		"  python tools\spike2_emu\vpx\padcontroller.py --register" & vbNewLine & Err.Description
+	Set Controller = CreateObject("Spike2Vpx.Controller")
+	PadLog "CreateObject(Spike2Vpx.Controller): err=" & Err.Number & " " & Err.Description & " IsObject=" & IsObject(Controller)
+	If Err Then MsgBox "Can't load Spike2Vpx.Controller: open SPIKE 2 VPX Setup to register it." & _
+		vbNewLine & Err.Description
 	If VPinMAMEDriverVer < VBSver Or Err Then MsgBox "PADSPIKE2.vbs ver " & VBSver & " or higher required."
 	PadStartDOF
 	PadStartB2S

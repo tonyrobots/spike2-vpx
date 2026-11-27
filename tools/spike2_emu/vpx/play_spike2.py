@@ -16,9 +16,11 @@ from xml.etree.ElementTree import ParseError
 
 # PAD's embedded Windows Python does not add the script directory to sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import controller_id  # noqa: E402
 import padcontroller  # noqa: E402
 import padlaunch  # noqa: E402
 import padlighting  # noqa: E402
+import padmigrate  # noqa: E402
 import vpx_lcd  # noqa: E402
 
 
@@ -34,7 +36,9 @@ def embedded_script(table):
 
 
 def patched_script(script):
-    return any(marker in script.lower() for marker in ("padspike2.vbs", "pad.controller"))
+    # The legacy name too: Play moves those tables to this app's (padmigrate).
+    return any(marker.lower() in script.lower() for marker in
+               ("padspike2.vbs", controller_id.PROGID, controller_id.LEGACY_PROGID))
 
 
 def read_title(table, script=None):
@@ -48,12 +52,29 @@ def read_title(table, script=None):
     return title
 
 
-def resolve_vpx(exe):
-    from vpxsetup import find_vpx, vpx_exe_for, vpx_exe_names
+def own_controller(table, script):
+    """Move a table prepared for the legacy PAD.Controller to this app's
+    controller where it is (padmigrate). Returns what was changed."""
+    try:
+        return padmigrate.controller_in_place(str(table), script)
+    except OSError as exc:
+        raise RuntimeError(f"Could not move this table to the {controller_id.PROGID} controller. {exc}") from exc
+
+
+def resolve_vpx(exe, vr=False):
+    """The player to launch: *exe* as given, else the one found. For VR, a
+    player that cannot do VR stands for its folder, whose VR player is taken
+    (the app saves the desktop player as vpx_exe)."""
+    from vpxsetup import find_vpx, vpx_exe_for, vpx_exe_names, vpx_player
 
     if not exe:
-        found = vpx_exe_for(find_vpx())
+        found = vpx_exe_for(find_vpx(), vr)
         exe = Path(found) if found else None
+    elif vr and not (vpx_player(exe) or {}).get("vr"):
+        found = vpx_exe_for(str(Path(exe).parent), vr=True)
+        if not found:
+            raise ValueError(f"{Path(exe).parent} has no VPX player that can play in VR.")
+        exe = Path(found)
     if not exe or not exe.is_file():
         raise ValueError("Pass the path to %s with -VpxExe." % " or ".join(vpx_exe_names()))
     return exe.resolve()
@@ -62,13 +83,14 @@ def resolve_vpx(exe):
 def check_controller():
     import winreg
 
+    name = controller_id.PROGID
     try:
-        clsid = winreg.QueryValue(winreg.HKEY_CLASSES_ROOT, r"PAD.Controller\CLSID")
+        clsid = winreg.QueryValue(winreg.HKEY_CLASSES_ROOT, rf"{name}\CLSID")
         server = winreg.QueryValue(winreg.HKEY_CLASSES_ROOT, rf"CLSID\{clsid}\LocalServer32")
     except OSError as exc:
-        raise RuntimeError("Register PAD.Controller with the VPX kit before launching.") from exc
+        raise RuntimeError(f"Register {name} in SPIKE 2 VPX Setup before launching.") from exc
     if not server:
-        raise RuntimeError("PAD.Controller has no registered COM server.")
+        raise RuntimeError(f"{name} has no registered COM server.")
     # A checkout can be launched against an older registered controller.
     # Only overlap startup when the actual COM server supports waiting for us.
     if not padcontroller.pythoncom:
@@ -79,7 +101,7 @@ def check_controller():
     com.CoInitialize()
     controller = None
     try:
-        controller = win32com.client.Dispatch("PAD.Controller", clsctx=com.CLSCTX_LOCAL_SERVER)
+        controller = win32com.client.Dispatch(name, clsctx=com.CLSCTX_LOCAL_SERVER)
         return controller.PadExternalStartup is True
     except (AttributeError, com.com_error):
         return False
@@ -145,6 +167,32 @@ def b2s_disabled_ini(exe, target):
     vpx_ini_set({"ForceDisableB2S": 1}, section="Controller", path=target)
 
 
+def vr_ini(exe, vr, ini=None):
+    """Set VR_INI's keys for this launch of *exe* in *ini* (a run's own copy),
+    else in the user's VPX INI. Returns what puts the user's INI back, or None
+    when there is nothing to put back: a DirectX player has no VR keys, and a
+    copy is thrown away. The real INI is used so the VR table position a
+    player sets in-game is kept: VPX saves it there."""
+    from padvpx import vpx_ini_get, vpx_ini_path, vpx_ini_set
+    from vpxsetup import VR_INI, vpx_player
+
+    player = vpx_player(exe)
+    if not player or not player["vr"]:
+        return None
+    path = str(ini) if ini else vpx_ini_path()
+    keys = VR_INI[bool(vr)]
+    before = {section: vpx_ini_get(values, section=section, path=path) for section, values in keys.items()}
+    for section, values in keys.items():
+        vpx_ini_set(values, section=section, path=path)
+    if ini:
+        return None
+
+    def put_back():
+        for section, values in before.items():
+            vpx_ini_set(values, section=section, path=path)
+    return put_back
+
+
 def lighting_sources(launch, rig, deadline):
     """Return active and discoverable sources after this run publishes its tables."""
     until = min(deadline, time.monotonic() + 5)
@@ -189,7 +237,7 @@ def read_lighting_sources(launch, tables, nodes_current, topper_off=None):
 
 
 def play(launch, exe, table, timeout, progress=None, *, overlap=False, disable_b2s=False,
-         lighting=None, lighting_report=None):
+         lighting=None, lighting_report=None, vr=False):
     # COM can discover the run from the board independently of VPX's environment.
     if padcontroller.Rig.board_run(launch.title):
         raise RuntimeError(f"Close the existing {launch.title} rig before starting this table.")
@@ -220,11 +268,15 @@ def play(launch, exe, table, timeout, progress=None, *, overlap=False, disable_b
     with ExitStack() as cleanup:
         cleanup.callback(launch.stop)
         command = [str(exe), "-ExtMinimized"]
+        ini = None
         if disable_b2s:
             folder = cleanup.enter_context(TemporaryDirectory(prefix="spike2-vpx-b2s-"))
             ini = Path(folder) / "VPinballX.ini"
             b2s_disabled_ini(exe, ini)
             command.extend(["-Ini", str(ini)])
+        put_back = vr_ini(exe, vr, ini)
+        if put_back:
+            cleanup.callback(put_back)          # after VPX has closed and saved its own
         command.extend(["-play", str(table)])
         target = vpx_lcd.fullscreen_target()
         launch.windows_lcd = target
@@ -340,6 +392,7 @@ def main():
     source.add_argument("--card", type=Path, help="Prepared SPIKE 2 card image")
     parser.add_argument("--table", type=Path, required=True, help="PAD-patched .vpx file")
     parser.add_argument("--vpx-exe", type=Path, help="Override the installed VPX player")
+    parser.add_argument("--vr", action="store_true", help="Play in a VR headset (needs VPX's OpenGL build)")
     parser.add_argument("--distro", help="Override the prepared WSL distribution")
     parser.add_argument("--app-game", help="Launch an exported app pairing using the app settings")
     parser.add_argument("--startup-timeout", type=int, default=180)
@@ -363,8 +416,10 @@ def main():
         native_title = padlaunch.game_for(title)
         if not re.fullmatch(r"[A-Za-z0-9_-]+", native_title):
             raise ValueError(f"Invalid native SPIKE 2 game name in the map for {title}.")
-        exe = resolve_vpx(args.vpx_exe)
+        exe = resolve_vpx(args.vpx_exe, args.vr)
         overlap = check_controller()
+        for line in own_controller(table, embedded_script(table)):
+            print(line, flush=True)
 
         distro = args.distro or padlaunch.distro()
         card = args.card
@@ -397,7 +452,7 @@ def main():
         except (OSError, ValueError):
             settings = {}
         return play(launch, exe, table, args.startup_timeout, overlap=overlap,
-                    lighting=settings.get("lighting"))
+                    lighting=settings.get("lighting"), vr=args.vr)
     except KeyboardInterrupt:
         return 130
     except (OSError, ValueError, RuntimeError, ImportError, subprocess.SubprocessError) as exc:

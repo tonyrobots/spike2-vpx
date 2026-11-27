@@ -6,5 +6,6 @@
 folder. Godzilla LE uses `godzilla_le.vpxmap.json` and the Godzilla patcher.
 
 Use the [Setup window](../../../README.md#set-up) to register the bundled
-`PAD.Controller`. Use `Play-Spike2Vpx.ps1` to start the game before opening the
+`Spike2Vpx.Controller` (upstream's is `PAD.Controller`; `controller_id.py` says
+why this fork has its own). Use `Play-Spike2Vpx.ps1` to start the game before opening the
 table and to stop the game when VPX exits.

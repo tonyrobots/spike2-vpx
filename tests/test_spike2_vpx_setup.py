@@ -144,11 +144,13 @@ class StandaloneSetupTest(unittest.TestCase):
         self.assertEqual(self.app.vpx_executable(), dx9)
         self.assertEqual(self.app.vpx_executable(vr=True), gl)
         self.assertEqual(self.app.settings["vpx_exe"], str(dx9))   # what app 0.1.0 reads
-        with patch.object(setup.vpxsetup, "vpx_version", return_value=(10, 8, 0)) as version:
+        with patch.object(setup.vpxsetup, "vpx_version", return_value=(10, 8, 0)) as version, \
+                patch.object(setup.vpxsetup, "vr_runtime", return_value=("SteamVR", "")) as runtime:
             check = self.app.check_vpx()
         version.assert_called_once_with(dx9)
+        runtime.assert_called_once_with(str(folder))
         self.assertEqual(check.state, "Ready")
-        self.assertIn("VR available", check.detail)
+        self.assertIn("VR ready (SteamVR)", check.detail)
 
     def test_a_folder_without_opengl_is_desktop_only(self):
         folder = Path(self.app.data).resolve()
@@ -156,7 +158,7 @@ class StandaloneSetupTest(unittest.TestCase):
         self.app.choose_vpx(folder / "VPinballX64.exe")       # picking a player picks its folder
         self.assertIsNone(self.app.vpx_executable(vr=True))
         with patch.object(setup.vpxsetup, "vpx_version", return_value=(10, 8, 0)):
-            self.assertIn("desktop only (VR needs VPinballX_GL64.exe)", self.app.check_vpx().detail)
+            self.assertIn("VR unavailable. The VPX folder has no VPinballX_GL64.exe.", self.app.check_vpx().detail)
 
     def test_opengl_alone_serves_desktop_and_vr(self):
         folder = Path(self.app.data).resolve()
@@ -177,6 +179,50 @@ class StandaloneSetupTest(unittest.TestCase):
         (folder / "VPinballX_GL64.exe").touch()
         self.app.settings["vpx_exe"] = str(folder / "VPinballX64.exe")
         self.assertEqual(self.app.vpx_executable(vr=True), folder / "VPinballX_GL64.exe")
+
+    def test_vr_runtime_follows_the_openvr_loader_beside_vpx(self):
+        vx = setup.vpxsetup
+        folder = Path(self.app.data)
+        dll = folder / "openvr_api64.dll"
+        dll.write_bytes(b"MZ ... OpenComposite ... xrCreateInstance")
+        with patch.object(vx, "openxr_runtime", return_value="VirtualDesktopXR"), \
+                patch.object(vx, "openvr_runtime", return_value="C:/SteamVR"):
+            self.assertEqual(vx.vr_runtime(str(folder)), ("VirtualDesktopXR through OpenComposite", ""))
+        with patch.object(vx, "openxr_runtime", return_value=""), \
+                patch.object(vx, "openvr_runtime", return_value="C:/SteamVR"):
+            self.assertIn("no OpenXR runtime", vx.vr_runtime(str(folder))[1])   # SteamVR is not what it loads
+        dll.write_bytes(b"MZ ... OpenVR Loader DLL")
+        with patch.object(vx, "openvr_runtime", return_value="C:/SteamVR"):
+            self.assertEqual(vx.vr_runtime(str(folder)), ("SteamVR", ""))
+        with patch.object(vx, "openvr_runtime", return_value=""):
+            self.assertIn("No VR runtime found", vx.vr_runtime(str(folder))[1])
+
+    def test_openvr_runtime_reads_what_steamvr_registered(self):
+        vx = setup.vpxsetup
+        local = Path(self.app.data) / "local"
+        runtime = local / "SteamVR"
+        runtime.mkdir(parents=True)
+        (local / "openvr").mkdir()
+        (local / "openvr" / "openvrpaths.vrpath").write_text(
+            '{"runtime": ["%s", "%s"]}' % ("C:/gone", str(runtime).replace("\\", "/")), encoding="utf-8")
+        with patch.dict(setup.vpxsetup.os.environ, {"LOCALAPPDATA": str(local)}):
+            self.assertEqual(Path(vx.openvr_runtime()), runtime)
+        with patch.dict(setup.vpxsetup.os.environ, {"LOCALAPPDATA": str(local / "none")}):
+            self.assertEqual(vx.openvr_runtime(), "")
+
+    def test_the_vpx_row_says_whether_vr_can_be_played(self):
+        folder = Path(self.app.data).resolve()
+        (folder / "VPinballX64.exe").touch()
+        self.app.choose_vpx(folder)
+        with patch.object(setup.vpxsetup, "vpx_version", return_value=(10, 8, 0)):
+            self.assertIn("VR unavailable. The VPX folder has no VPinballX_GL64.exe.", self.app.check_vpx().detail)
+            (folder / "VPinballX_GL64.exe").touch()
+            with patch.object(setup.vpxsetup, "vr_runtime", return_value=("SteamVR", "")):
+                self.assertIn("VR ready (SteamVR)", self.app.check_vpx().detail)
+        self.assertEqual(self.app.vr, ("SteamVR", ""))
+        self.assertFalse(self.app.vr_wanted())
+        self.app.set_vr(True)
+        self.assertTrue(setup.Setup(self.app.data).vr_wanted())
 
     def test_players_are_matched_by_name_whatever_the_case(self):
         self.assertTrue(setup.vpxsetup.vpx_player("C:/VPX/vpinballx_gl64.EXE")["vr"])

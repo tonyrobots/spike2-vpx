@@ -7,11 +7,12 @@ import sys
 
 # The bundled Python uses an isolated search path.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import controller_id  # noqa: E402
 import padcontroller  # noqa: E402
 import vpxsetup  # noqa: E402
 
 
-def registration(root, prefix=""):
+def registration(root, prefix="", progid=controller_id.PROGID, clsid_=controller_id.CLSID):
     import winreg
 
     def default(key):
@@ -20,11 +21,11 @@ def registration(root, prefix=""):
         except FileNotFoundError:
             return ""
 
-    clsid = default(r"PAD.Controller\CLSID")
-    base = rf"CLSID\{padcontroller.CLSID}"
+    clsid = default(rf"{progid}\CLSID")
+    base = rf"CLSID\{clsid_}"
     paths = default(base + r"\PythonCOMPath")
     server = default(base + r"\LocalServer32")
-    if (clsid and clsid.casefold() != padcontroller.CLSID.casefold()
+    if (clsid and clsid.casefold() != clsid_.casefold()
             or paths and not vpxsetup.registered_here(paths)
             or server and not paths):
         return "foreign"
@@ -43,18 +44,18 @@ def check():
         return "Unavailable", "Repair this app’s Python bundle to install pywin32."
     state = registration(winreg.HKEY_CLASSES_ROOT)
     if state == "foreign":
-        return "Needs attention", "PAD.Controller belongs to another installation. " \
+        return "Needs attention", f"{controller_id.PROGID} belongs to another installation. " \
             "Unregister it from that installation, then check again."
     if state == "absent":
-        return "Missing", "Set up registers the bundled PAD.Controller with Windows."
+        return "Missing", "Set up registers the bundled controller with Windows."
     if state == "ours":
         import win32com.client
 
         try:
-            controller = win32com.client.Dispatch("PAD.Controller",
+            controller = win32com.client.Dispatch(controller_id.PROGID,
                                                  clsctx=padcontroller.pythoncom.CLSCTX_LOCAL_SERVER)
             if str(controller.Version) == padcontroller.VERSION:
-                return "Ready", "Windows activated the PAD.Controller bundled with this app."
+                return "Ready", "Windows activated the controller bundled with this app."
         except padcontroller.pythoncom.com_error as exc:
             return "Repair needed", f"Windows could not activate the bundled controller. {exc}"
     return "Repair needed", "Set up repairs the bundled controller’s COM registration."
@@ -71,8 +72,25 @@ def change(action):
             padcontroller.main(["--unregister"])
         return
     if state == "foreign" or registration(winreg.HKEY_CLASSES_ROOT) == "foreign":
-        raise RuntimeError("PAD.Controller belongs to another installation.")
+        raise RuntimeError(f"{controller_id.PROGID} belongs to another installation.")
     padcontroller.main(["--register"])
+    drop_legacy(winreg)
+
+
+def drop_legacy(winreg):
+    """Unregister the PAD.Controller this installation registered before it had
+    its own name (0.1.0), so an upgrade leaves no registration behind pointing
+    here. One that another app (Pinball Asset Decryptor) owns is left alone."""
+    try:
+        path = winreg.QueryValue(winreg.HKEY_LOCAL_MACHINE,
+                                 rf"Software\Classes\CLSID\{controller_id.LEGACY_CLSID}\PythonCOMPath")
+    except OSError:
+        return
+    if vpxsetup.registered_here(path):
+        from win32com.server import register
+
+        register.UnregisterServer(controller_id.LEGACY_CLSID, controller_id.LEGACY_PROGID)
+        print(f"unregistered this installation's {controller_id.LEGACY_PROGID}")
 
 
 def main():

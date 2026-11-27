@@ -3,15 +3,23 @@
 Goal: play SPIKE 2 tables in a VR headset through Visual Pinball X 10.8's
 OpenGL build (`VPinballX_GL64.exe`), with the Stern LCD visible in the headset.
 
-Status: Phase 0 passed on 2026-11-26. The live Stern LCD showed in the VR
-backbox of JAWS 50th (PAD) and updated smoothly. See "Phase 0 results".
-Phase 1 is done. Setup saves the VPX **folder** (`vpx_dir`). An older
-`vpx_exe` is read as its folder, and it is still written (the desktop exe)
-because app 0.1.0 reads only that key. `vpxsetup.VPX_EXES` is the single
-list of players. `Setup.vpx_executable(vr=False)` picks DX9 for desktop play
-(GL if DX9 is missing) and GL for VR. Phase 2 is next.
+Status (2026-11-26):
 
-## Background: how the app finds and launches VPX
+- **Phase 0 passed.** The live Stern LCD showed in the VR backbox, using a
+  placeholder `Virtual DMD` window with the LCD kept on top of it.
+- **Phase 1 is done.** Setup saves the VPX folder, and the app picks DX9 or
+  GL from it.
+- **Phase 2 is done** but not yet committed: a "Play in VR" checkbox, VR
+  runtime detection, and the INI keys per launch. The table plays in the
+  headset, but the LCD isn't there yet.
+- **Own controller identity is done**, also not yet committed:
+  `Spike2Vpx.Controller`, so the app no longer collides with Pinball Asset
+  Decryptor.
+- **Phase 3 is next:** the LCD in the headset.
+
+See "Plan" below.
+
+## Background: how the app found and launched VPX (before Phase 1)
 
 - `spike2_vpx_setup.py:123` `choose_vpx` rejects any exe not named
   `VPinballX64.exe` and saves the path as `settings["vpx_exe"]` in
@@ -107,42 +115,19 @@ Tag `v10.8.0-2051-28dd6c3` of https://github.com/vpinball/vpinball.
 
 For SPIKE 2 the Stern LCD *is* the game's main display. It's a WSLg desktop
 window, so in a headset you would see the playfield but not the LCD. The only
-way VPX 10.8 pulls an outside window into VR is the capture above. The
-LCD's title doesn't match the capture list, and it can't simply be renamed,
-because `find_kit_window` finds the LCD by that title.
+way VPX 10.8 pulls an outside window into VR is the capture above. Phase 0
+found how to feed it: a placeholder window, described below.
 
 ## Plan
 
-### Phase 0: manual test on the Windows VR PC (do this first)
+### Phase 0: manual test on the owner's VR PC (done 2026-11-26)
 
-You need: `VPinballX_GL64.exe`, SteamVR running with a headset, and a set-up
-SPIKE 2 table with a VR backbox (Aerosmith "with VR" is listed in the README).
+These were hands-on tests in the headset, with scratch scripts and
+hand-written display.conf lines, to learn how VPX's capture behaves. The
+first test renamed the LCD window to `Virtual DMD`. Later tests covered PUP's
+DMD rectangle, then used the placeholder window.
 
-1. Back up `%APPDATA%\VPinballX\VPinballX.ini`, then set
-   `[PlayerVR] AskToTurnOn = 0`, `[Player] CaptureExternalDMD = 1` and
-   optionally `[Player] CapturePUP = 1`.
-2. Launch:
-   `.\Play-Spike2Vpx.ps1 -Card <image.raw> -Table <table.vpx> -VpxExe "<path>\VPinballX_GL64.exe"`
-3. Note the starting state. Expected: playfield in the headset, LCD only on the
-   desktop. Also confirm the controller, switches and game work under the GL build.
-4. Run a helper script (to be written in the session scratchpad, not the repo).
-   About 40 lines of Python with ctypes. It should:
-   - find the LCD window the way `find_kit_window` does ("Stern Spike 2 emulator" in the title);
-   - rename it to exactly `Virtual DMD` with `SetWindowTextW`;
-   - confirm `FindWindowA(None, "Virtual DMD")` returns that window;
-   - poll the title every second for about 60 seconds and report if WSLg changes it back;
-   - optionally move the window fully on-screen and on top.
-5. In the headset: does the LCD appear in the backbox, and does it update smoothly?
-6. Restore the INI.
-
-| Result | Next step |
-|---|---|
-| LCD shows in the headset and the title stays `Virtual DMD` | Phase 3 option (a) |
-| LCD shows, but the title reverts | Re-apply the title from the launcher, or option (b) |
-| VPX finds the window but the backbox is blank | The table's VR backbox doesn't use VPX's DMD texture; patch tables per title |
-| VPX never finds the window, or the capture is black | Option (b) |
-
-### Phase 0 results (2026-11-26)
+#### Results
 
 Setup: JAWS 50th (PAD), `VPinballX_GL64.exe` 10.8.0.2079 (Panasony) through
 OpenComposite and Virtual Desktop. Launched with
@@ -231,90 +216,207 @@ The system Python lacks `olefile`. Monitors: main 0,0 2560x1440; 2nd
       was perfect, and VPX followed both moves live.
     - The script used: `docs/vr-phase0/placeholder.py`.
   - The backbox DMD aspect stays per table (JAWS squashes, GOTG fits).
-- Earlier choice for Phase 3, replaced by the placeholder design above: option (a), without the mirror window. The launcher puts
-  the LCD in a windowed spot that fits inside one monitor, then gives it the
-  `Virtual DMD` title once before VPX starts searching. `padglhost` setting the
-  title in VR mode is the cleaner version. Either way, the LCD lookup has to
-  stop depending on the title (keep the handle).
 
-### Phase 1: accept either exe
+### Phase 1: choose the VPX folder, not an exe (done, commit `1bc4ae06a`)
 
-- In `vpxsetup`, keep one list of known VPX exes, with the build type as data,
-  e.g. `VPinballX64.exe` (DX9) and `VPinballX_GL64.exe` (GL, VR-capable). No
-  exe names anywhere else.
-- `vpx_version` takes an exe path, not a folder.
-- `find_vpx`, `Setup.vpx_executable`, `Setup.choose_vpx`, `resolve_vpx` and
-  the file-picker filter all resolve through that list. `vpx_executable()`
-  returns the exact saved exe.
-- Update the README and tests. Confirm the GL exe has a readable version
-  resource; `check_vpx` depends on it.
+- `vpxsetup.VPX_EXES` is the single list of players, with the build as data:
+  `VPinballX64.exe` (DirectX 9) and `VPinballX_GL64.exe` (OpenGL, `vr: True`).
+  No exe names appear anywhere else.
+- Setup saves the **folder** (`vpx_dir`). Choose VPX is a folder picker; picking
+  an exe means its folder.
+  - An older saved `vpx_exe` is read as its folder.
+  - `vpx_exe` is still written (the desktop exe), because app 0.1.0 shares
+    `setup.json` and reads only that key.
+- `Setup.vpx_executable(vr=False)` picks the exe:
+  - desktop play: DX9, or GL when it is the only one there;
+  - VR: GL.
+- `vpx_version` takes an exe path.
 
-### Phase 2: VR setting per launch
+### Phase 2: "Play in VR" per launch (done, not yet committed)
 
-- Add a VR setting (probably on the Cabinet tab), offered only when the
-  selected exe is VR-capable and SteamVR is installed.
-- On every GL launch, write `AskToTurnOn` (0 when VR is on, 2 otherwise) and,
-  in VR, `CaptureExternalDMD` / `CapturePUP`.
-- In VR mode, skip `cabinet.apply` monitor assignment,
-  `_place_player` / `_frame_player`, and `.res` writing. Keep the LCD windowed
-  and on-screen so capture can grab it.
+- **UI.** A remembered "Play in VR" checkbox beside Play on the Games page
+  (`settings["vr"]`).
+  - Hidden when the VPX folder has no VR player.
+  - Greyed out, with the reason under it, when no runtime is found.
+  - It can always be turned **off**, so a broken VR setup never blocks play.
+  - Cabinet mode and exported launch scripts follow it, because both go
+    through `Player.play`.
+- **Availability** (`vpxsetup.vr_runtime`). VPX loads the
+  `openvr_api64.dll` beside it, and that decides what it needs:
+  - **OpenComposite** (the DLL contains "OpenComposite"): needs the active
+    OpenXR runtime (`HKLM\SOFTWARE\Khronos\OpenXR\1` `ActiveRuntime`). The
+    name shown is taken from its manifest.
+  - **Valve's loader**: needs the runtime SteamVR registers
+    (`%LOCALAPPDATA%\openvr\openvrpaths.vrpath`).
+  - The Setup row shows the result, e.g. "VR ready (VirtualDesktopXR (Bundled)
+    through OpenComposite)", or "VR unavailable. <why>".
+  - `Setup.vr_status()` caches it as `Setup.vr` for the UI.
+- **Launch.** `Player.play` reads the setting.
+  - If VR is on but unavailable, it refuses with the reason.
+  - Otherwise it calls `play_spike2.play(..., vr=)` with
+    `vpx_executable(vr=)`.
+- **INI keys** (`vpxsetup.VR_INI`, applied by `play_spike2.vr_ini`), for
+  VR-capable players only:
+  - VR: `[PlayerVR] AskToTurnOn = 0`, `[Player] CaptureExternalDMD = 1`,
+    `CapturePUP = 1`.
+  - Desktop launch of the GL build: `AskToTurnOn = 2`. VPX's default is 0,
+    so without this the GL build would go into VR whenever a runtime is
+    installed.
+  - DX9: nothing.
+  - Decision (open question 1): the keys go into the user's **real** INI and
+    their old values are put back after VPX exits. VR table-position tweaks
+    made in-game are therefore kept, and the user's global config is
+    unchanged afterwards.
+  - With B2S disabled, the run already uses a temp INI copy, and the keys go
+    there. VR tweaks made in that combination are lost, as before.
+- **Command line.** `Play-Spike2Vpx.ps1 -Vr` / `play_spike2.py --vr`. In VR, a
+  non-VR exe (such as the saved `vpx_exe`) stands for its folder, whose VR
+  player is used.
+- **Not done, on purpose:**
+  - The controller's VR behaviour is unchanged, and all VR window work lives
+    in the launcher. Its LCD handling only raises the LCD to topmost, which
+    helps.
+  - `cabinet.apply` / `.res` writing still run in VR. They keep the B2S
+    backglass on a screen, where `CapturePUP` can grab it.
+- **What a Phase 2 VR launch gives:** the table plays in the headset, but the
+  LCD still opens wherever display.conf puts it, so it isn't in the headset
+  yet. That is Phase 3.
 
-### Phase 3: LCD in the headset (Phase 0 picks the option)
+### Phase 3: the LCD in the headset (next)
 
-- **(a)** In VR mode, title the LCD window exactly `Virtual DMD`
-  (`padglhost.c`), and change LCD lookup to something other than the title:
-  the tracked window handle, the process, or a class.
-- **(b)** A small Windows-side mirror window titled `Virtual DMD` that shows
-  the LCD frames.
-- Per table: check that the VR backbox shows VPX's DMD texture, given that
-  FlexDMD/UltraDMD are stubbed. Fix the aspect ratio of the backbox DMD area,
-  which isn't 16:9 (JAWS squashes the LCD vertically). Not yet looked at how the
-  table defines that area. Likely fix: patch its size in `vpxshadow`, with the
-  size per table as data.
-- **Systematic fix for squashed backboxes such as JAWS (for later).**
-  - In 10.8 the VR backbox DMD is a Flasher with `IDMD` set
-    (`flasher.cpp:398`). VPX stretches the captured texture over the
-    flasher's shape, which comes from its corner (drag) points. Those points
-    can't be changed from the script.
-  - Step 1: read the shape automatically. When patching, `vpxshadow` finds
-    the `IDMD` flasher and takes the aspect ratio of its corner points'
-    bounding box (to check: flasher rotation).
-  - Option 1, the default (no table edits): **letterbox in the capture.**
-    Give the placeholder window the flasher's aspect and centre the 16:9 LCD
-    inside it. The placeholder is black, so the bars come out black. The
-    picture is correct but doesn't fill the whole area.
-  - Option 2, opt-in per table as data: **reshape the flasher.** Change its
-    corner points in the patched copy to 16:9, keeping the centre. It fills
-    the area, but it may overlap the backbox art, so check it per table.
-- Fix the windowed-LCD coordinate bug (X root vs Windows coordinates) in
-  `padisplay` before relying on a windowed LCD.
+This builds the placeholder design confirmed on GOTG, all in the launcher
+(`play_spike2.py` / `vpx_lcd.py`).
 
-### Phase 4: polish
+1. **Fix the windowed-LCD coordinate bug first.**
+   - `padisplay` writes the game window's x/y in Windows coordinates, but
+     `padglhost` uses them as X root coordinates. Under WSLg the X origin is
+     the virtual desktop's top-left: the smallest monitor left/top, here
+     (-2560, 0).
+   - So convert when writing the line (x - min_left, y - min_top), and test it
+     with monitors left of and above the main one.
+   - This also fixes windowed LCDs for non-VR users with that monitor layout.
+2. **Choose the target rect (as data):** where the LCD is captured from.
+   - It must lie fully inside one monitor, on-screen and uncovered.
+   - Default: the LCD's own monitor from the cabinet layout if one is
+     assigned, else the main monitor. 16:9, about 1024x576, away from the VPX
+     preview window.
+   - Refuse clearly if no monitor can hold it.
+3. **Placeholder window.** A launcher-owned borderless `WS_POPUP` window
+   titled `Virtual DMD` (`WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`, black brush)
+   at the target rect.
+   - It runs on its own thread with a message loop. It must be created
+     **before** VPX starts, so it wins over PUP's windows, and it is
+     destroyed in the run's cleanup.
+   - `docs/vr-phase0/placeholder.py` is the tested reference.
+4. **LCD over it.** For the run, write a display.conf line with
+   `mode=window border=0 fs=0` and the target rect in X coordinates. Put the
+   user's line back after the run, like the INI keys.
+   - `mode=window` keeps `vpx_lcd.fullscreen_target()` and
+     `PAD_WINDOWS_LCD` off, so their placement loop can't fight the window.
+5. **Keep the LCD topmost over the target** for the whole session, by
+   z-order only. In Phase 0 the LCD was pushed back 9 times during startup.
+   - Find the LCD by its title as today. It is never renamed, so the title
+     lookups stay as they are.
+6. **Tests**, then **headset checks:** JAWS (no PUP) and GOTG (PUP), started
+   from the app with the checkbox, and with one monitor and with two.
 
-SteamVR setup check, a README VR section, and a "VR verified" column in the
-supported-tables list.
+### Phase 4: per-table fit and polish
 
-## Open decisions (ask the owner)
+- **Squashed backboxes such as JAWS.** In 10.8 the VR backbox DMD is a
+  Flasher with `IDMD` set (`flasher.cpp:398`). VPX stretches the captured
+  texture over the flasher's shape, which comes from its corner (drag)
+  points. Those points can't be changed from the script.
+  - Step 1: read the shape automatically. `vpxshadow` or the launcher finds
+    the `IDMD` flasher and takes its corner points' bounding-box aspect.
+    Check how flasher rotation affects this.
+  - Default, no table edits: **letterbox in the capture.** Give the
+    placeholder the flasher's aspect and centre the 16:9 LCD inside it. The
+    bars come out black.
+  - Opt-in per table, as data: **reshape the flasher** to 16:9 in the
+    patched copy, keeping its centre. It fills the area, but check it
+    against the backbox art.
+  - Also check that every VR table's backbox uses VPX's DMD texture, given
+    that FlexDMD/UltraDMD are stubbed (`vpxshadow.py:752`).
+- Check that `CapturePUP` shows the B2S backglass in VR backboxes. Its
+  window must be on-screen and uncovered.
+- Add a README VR section: needs the GL build plus SteamVR, or OpenComposite
+  with an OpenXR runtime (Virtual Desktop and others), and the checkbox.
+- Add a "VR verified" column to the supported-tables list.
 
-1. **Where to write VR INI keys.** The temp `-Ini` copy throws away VR
-   table-position tweaks the player makes in-game, because VPX saves them to
-   the temp file. Writing to the real INI keeps them but changes the user's
-   global VPX config. Recommendation: write to the real INI. Not yet answered.
-   (The existing B2S-disabled path has the same issue, and VR combined with
-   disabled B2S would lose tweaks.)
-2. Where the VR setting lives in the UI. Proposed (2026-11-26):
-   - A remembered "Play in VR" checkbox beside Play on the Games page.
-   - Disabled, with a one-line reason, when the folder has no GL exe or no VR
-     runtime is installed.
-   - Export launch script and cabinet mode follow it.
-   - No exe choice anywhere in the UI.
+### Own controller identity (done, not yet committed)
 
-   Waiting for the owner's OK.
+- **Why.** SPIKE 2 VPX is a fork of Pinball Asset Decryptor and kept its
+  COM identity, `PAD.Controller`. Windows keeps one registration per name, and
+  the last app to register wins. On the owner's PC that was PAD, so every
+  table ran PAD's older controller.
+  - Found in the first Phase 2 VR test: the owner had to click VPX before
+    playing. PAD's copy doesn't hand the keyboard back to VPX on runs the
+    launcher starts (no `external_start`). Its log showed no hand-back.
+  - Settings also leaked between the two apps (PAD's `player` placement in
+    `~\.pad-vpx.json`).
+- **Identity.** `controller_id.py` holds the name `Spike2Vpx.Controller` and
+  its own CLSID, plus the legacy pair. Registration, Setup's check, the
+  launcher's check, `padvpx status` and `vpxshadow`'s generated script all
+  take the name from there. `PADSPIKE2.vbs` is static text, and
+  `tests/test_controller_id.py` keeps it in step.
+- **Tables prepared under the old name** are moved to the new one where they
+  are, on Play (`padmigrate.controller_in_place`, called from `Player.play`
+  and the CLI):
+  - Scripted tables: the `CreateObject` line and its error message are
+    rewritten, and the table is re-signed and verified, as
+    `vpxsounds.quiet_in_place` does. If it doesn't verify, it's left as it
+    was and Play refuses.
+  - ROM tables: a legacy `PADSPIKE2.vbs` beside the table is replaced with
+    this app's copy, as preparing a table already does.
+  - `patched_script` accepts both names.
+- **Registration.** Setup registers the new name. It also unregisters the
+  legacy name, but only when it points at this installation (an upgrade from
+  0.1.0). Pinball Asset Decryptor's registration is never touched.
+- **Still shared:** the `PADSPIKE2.vbs` file name. A ROM table prepared by
+  each app in one folder shares one helper, and the last app to prepare or
+  play it wins. Renaming it would need all four ROM patchers changed.
+
+### Follow-ups outside VR
+
+- The `PADSPIKE2.vbs` name collision above.
+- The B2S-disabled temp-INI path loses every in-game VPX setting change,
+  not just VR ones.
+- The Windows-side fullscreen LCD (`PAD_WINDOWS_LCD`) leaves WSLg's 32 px
+  shadow margin outside the monitor. That's harmless on the desktop, but it's
+  why that LCD can't be captured.
+
+## Decisions
+
+1. **VR INI keys:** set in the user's real INI for the launch and put back
+   afterwards. With B2S disabled they go into the run's temp copy instead.
+   (Owner agreed to Phase 2 on 2026-11-26.)
+2. **VR in the UI:** a remembered "Play in VR" checkbox beside Play. There's
+   no exe choice in the UI (owner, 2026-11-26).
+3. **The controller stays unchanged for VR**: window work lives in the
+   launcher (owner, 2026-11-26).
+4. **SPIKE 2 VPX gets its own controller identity**, moving old tables in
+   place, so it can be installed beside Pinball Asset Decryptor (owner,
+   2026-11-26).
+
+Still open, for Phase 3:
+
+- The default target monitor and size.
+- Letterbox or reshape as the default for tables like JAWS (recommendation:
+  letterbox).
 
 ## Notes for the next session
 
 - Run Claude Code natively on Windows (PowerShell), not inside WSL. VPX, the
   launcher and the window APIs are all Windows-side.
 - The owner looks in the headset. Ask them to report what they see.
-- Follow the owner's CLAUDE.md: one implementation per job, exceptions as data,
+- Follow the owner's rules: one implementation per job, exceptions as data,
   commit only when asked.
+- To run the dev app, use the installed app's Python
+  (`D:\Program Files\SPIKE 2 VPX\python`), because the system Python lacks
+  `olefile`. Its `python313._pth` puts the *installed* app folder on the path
+  rather than the script's folder, so put the repo first:
+  `python.exe -c "import sys, runpy; sys.path.insert(0, r'<repo>'); runpy.run_path(r'<repo>\Spike2Vpx.pyw', run_name='__main__')"`.
+  - Setup registers `Spike2Vpx.Controller` to the checkout it runs from,
+    with an administrator prompt. Pinball Asset Decryptor keeps
+    `PAD.Controller`.
+- Tests: a venv with `requirements-dev.txt`, then `python -m pytest -q`.

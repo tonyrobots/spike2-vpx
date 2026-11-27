@@ -401,9 +401,17 @@ class Player:
         return None
 
     def play(self, game, progress, timeout=180, *, lighting_update=None):
-        exe = self.setup.vpx_executable()
-        if exe is None or self.setup.check_vpx().state != "Ready":
-            raise ValueError("Choose a compatible Visual Pinball X executable in Setup.")
+        vr = self.setup.vr_wanted()
+        if self.setup.check_vpx().state != "Ready":
+            raise ValueError("Choose a compatible Visual Pinball X folder in Setup.")
+        if vr:
+            runtime, why = self.setup.vr_status()
+            if not runtime:
+                raise ValueError(f"Play in VR is on, but VR is unavailable. {why} "
+                                 "Turn off Play in VR to play on the desktop.")
+        exe = self.setup.vpx_executable(vr=vr)
+        if exe is None:
+            raise ValueError("Choose a compatible Visual Pinball X folder in Setup.")
         progress("Checking files", False)
         overlap = play_spike2.check_controller()
         if self.inspect_image(game.image).title != game.title:
@@ -412,6 +420,8 @@ class Player:
         script = play_spike2.embedded_script(table)
         self.compatible(game, table, script)
         title = play_spike2.read_title(table, script)
+        for line in play_spike2.own_controller(table, script):
+            self.setup.log.info("%s", line)
         monitors = padisplay.monitors()
         layout = self.layout(monitors)
         roles = cabinet.resolve(layout, monitors)
@@ -447,7 +457,7 @@ class Player:
 
         result = play_spike2.play(launch, exe.resolve(), table, timeout, progress=report, overlap=overlap,
                                   disable_b2s=disable_b2s, lighting=self.setup.settings.get("lighting"),
-                                  lighting_report=report_lighting)
+                                  lighting_report=report_lighting, vr=vr)
         if started:
             try:
                 self.record_played(game)

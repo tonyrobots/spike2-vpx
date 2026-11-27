@@ -236,6 +236,9 @@ class PlayerWindow:
         self.play_button.pack(side="left")
         self.export_button = ttk.Button(actions, text="Export launch script…", command=self.export_game)
         self.export_button.pack(side="left", padx=(8, 0))
+        # VR is a play-time choice, remembered; shown once Setup finds a VR player
+        self.vr_var = tk.BooleanVar(value=self.setup.vr_wanted())
+        self.vr_check = ttk.Checkbutton(actions, text="Play in VR", variable=self.vr_var, command=self.toggle_vr)
         self.play_hint = ttk.Label(detail, style="Hint.TLabel", wraplength=440, justify="left")
         self.play_hint.pack(anchor="w", pady=(0, 8), before=image)
         self.vpx_hint = ttk.Label(detail, style="Hint.TLabel", wraplength=440, justify="left")
@@ -811,8 +814,19 @@ class PlayerWindow:
         self.play_hint.configure(text=hint)
         self.cabinet_status.configure(text=hint)
         vpx = self.checks.get("vpx")
-        self.vpx_hint.configure(text=vpx.detail.split(" · ", 1)[0]
-                                if vpx and vpx.state == "Ready" else "Requires Visual Pinball X 10.8+ x64")
+        runtime, why = self.setup.vr
+        has_vr_player = self.setup.vpx_executable(vr=True) is not None
+        if has_vr_player or self.vr_var.get():
+            self.vr_check.pack(side="left", padx=(12, 0))
+        else:
+            self.vr_check.pack_forget()
+        # off is always allowed, so a broken VR setup never blocks play
+        self.vr_check.state(["!disabled"] if (runtime or self.vr_var.get()) and not self.busy else ["disabled"])
+        lines = [vpx.detail.split(" · ", 1)[0] if vpx and vpx.state == "Ready"
+                 else "Requires Visual Pinball X 10.8+ x64"]
+        if self.vr_var.get() or (has_vr_player and not runtime):
+            lines.append(f"VR: {runtime}" if runtime else f"VR unavailable. {why}")
+        self.vpx_hint.configure(text="\n".join(lines))
 
     def game_step(self):
         if self.same_game(self.game, self.recover_game):
@@ -834,11 +848,21 @@ class PlayerWindow:
             warnings = self.player.preflight(self.game)
         except ValueError as exc:
             return "Review cabinet layout", lambda: self.open_tab(self.cabinet_page), str(exc)
+        done = ("Playing in VR: put on your headset. Close VPX to end the game." if self.vr_var.get()
+                else "Close VPX to end the game.")
         return ("Try again" if self.same_game(self.game, self.launch_error_game) else "Play"), self.play, (
-            "\n".join(warnings) or "Close VPX to end the game.")
+            "\n".join(warnings) or done)
 
     def next_game_step(self):
         self.game_action()
+
+    def toggle_vr(self):
+        try:
+            self.setup.set_vr(self.vr_var.get())
+        except OSError as exc:
+            self.vr_var.set(self.setup.vr_wanted())
+            messagebox.showerror("Play in VR", str(exc), parent=self.root)
+        self.update_buttons()
 
     def open_tab(self, page):
         if self.cabinet_mode:

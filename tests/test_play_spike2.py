@@ -26,6 +26,65 @@ class ResolveVpxTest(unittest.TestCase):
                 play.resolve_vpx(None)
 
 
+class VrLaunchTest(unittest.TestCase):
+    INI = "[Player]\nCaptureExternalDMD = 0\n[PlayerVR]\nAskToTurnOn = 1\nTableX = 5\n"
+
+    def setUp(self):
+        import padvpx
+
+        folder = TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.folder = Path(folder.name)
+        self.ini = self.folder / "VPinballX.ini"
+        self.ini.write_text(self.INI, encoding="utf-8")
+        where = patch.object(padvpx, "vpx_ini_path", return_value=str(self.ini))
+        where.start()
+        self.addCleanup(where.stop)
+
+    def keys(self, section, *names, path=None):
+        import padvpx
+        return padvpx.vpx_ini_get(names, section=section, path=str(path or self.ini))
+
+    def test_a_vr_launch_sets_its_keys_and_puts_the_users_back(self):
+        put_back = play.vr_ini(Path("VPX/VPinballX_GL64.exe"), True)
+        self.assertEqual(self.keys("PlayerVR", "AskToTurnOn"), {"AskToTurnOn": "0"})
+        self.assertEqual(self.keys("Player", "CaptureExternalDMD", "CapturePUP"),
+                         {"CaptureExternalDMD": "1", "CapturePUP": "1"})
+        import padvpx
+        padvpx.vpx_ini_set({"TableX": 9}, section="PlayerVR")     # VPX saves a VR tweak in-game
+        put_back()
+        self.assertEqual(self.keys("PlayerVR", "AskToTurnOn", "TableX"), {"AskToTurnOn": "1", "TableX": "9"})
+        self.assertEqual(self.keys("Player", "CaptureExternalDMD", "CapturePUP"),
+                         {"CaptureExternalDMD": "0", "CapturePUP": ""})
+
+    def test_a_desktop_launch_of_the_opengl_player_turns_vr_off(self):
+        put_back = play.vr_ini(Path("VPX/VPinballX_GL64.exe"), False)
+        self.assertEqual(self.keys("PlayerVR", "AskToTurnOn"), {"AskToTurnOn": "2"})
+        put_back()
+        self.assertEqual(self.keys("PlayerVR", "AskToTurnOn"), {"AskToTurnOn": "1"})
+
+    def test_a_directx_launch_leaves_the_ini_alone(self):
+        self.assertIsNone(play.vr_ini(Path("VPX/VPinballX64.exe"), False))
+        self.assertEqual(self.ini.read_text(encoding="utf-8"), self.INI)
+
+    def test_a_runs_own_ini_copy_takes_the_keys_and_the_users_is_untouched(self):
+        copy = self.folder / "copy.ini"
+        copy.write_text(self.INI, encoding="utf-8")
+        self.assertIsNone(play.vr_ini(Path("VPX/VPinballX_GL64.exe"), True, copy))
+        self.assertEqual(self.keys("PlayerVR", "AskToTurnOn", path=copy), {"AskToTurnOn": "0"})
+        self.assertEqual(self.ini.read_text(encoding="utf-8"), self.INI)
+
+    def test_vr_takes_the_folders_opengl_player_for_a_saved_directx_one(self):
+        (self.folder / "VPinballX64.exe").touch()
+        (self.folder / "VPinballX_GL64.exe").touch()
+        dx9 = self.folder / "VPinballX64.exe"
+        self.assertEqual(play.resolve_vpx(dx9), dx9.resolve())
+        self.assertEqual(play.resolve_vpx(dx9, vr=True), (self.folder / "VPinballX_GL64.exe").resolve())
+        (self.folder / "VPinballX_GL64.exe").unlink()
+        with self.assertRaisesRegex(ValueError, "can play in VR"):
+            play.resolve_vpx(dx9, vr=True)
+
+
 class PreparedLaunchTest(unittest.TestCase):
     def setUp(self):
         logs = TemporaryDirectory()

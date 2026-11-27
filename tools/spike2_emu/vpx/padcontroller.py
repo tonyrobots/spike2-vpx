@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""padcontroller.py - PAD.Controller: the Spike 2 emulator as a Visual Pinball
-controller, in the shape of VPinMAME.Controller.
+"""padcontroller.py - Spike2Vpx.Controller: the Spike 2 emulator as a Visual
+Pinball controller, in the shape of VPinMAME.Controller. (Upstream Pinball
+Asset Decryptor calls its copy PAD.Controller; controller_id.py says why this
+fork has its own name.)
 
     python padcontroller.py --register      once, as the user (HKCU; no admin)
     python padcontroller.py --unregister
     python padcontroller.py --status        is a run up, what the map says
     python padcontroller.py --selftest      drive it through COM from Python
 
-A VPX table script does `Set Controller = CreateObject("PAD.Controller")`
+A VPX table script does `Set Controller = CreateObject("Spike2Vpx.Controller")`
 (PADSPIKE2.vbs does it inside LoadVPM) and core.vbs then talks to it exactly
 as it talks to VPinMAME: `Controller.Switch(n) = 1` when a ball closes a
 switch, `Controller.ChangedSolenoids` and `Controller.ChangedLamps` every
@@ -109,8 +111,7 @@ def _anything():
     """A COM object that takes any property (Games(...).Settings.Value(...))."""
     return _util.wrap(_Anything(), usePolicy=_policy.DynamicPolicy)
 
-CLSID = "{7D5B2A1E-6C3F-4B8A-9E21-5A2F0C7D9B11}"
-PROGID = "PAD.Controller"
+from controller_id import CLSID, PROGID  # noqa: E402
 VERSION = "03060000"            # what core.vbs compares; modulated solenoids off
 
 SW_SRC = "v"                    # padsw.h's writer tag for Visual Pinball
@@ -3627,7 +3628,7 @@ class _Anything:
 class PadController:
     _reg_clsid_ = CLSID
     _reg_progid_ = PROGID
-    _reg_desc_ = "PAD Spike 2 emulator controller for Visual Pinball"
+    _reg_desc_ = "SPIKE 2 VPX controller for Visual Pinball"
     _reg_policy_spec_ = "DynamicPolicy"
     # no _reg_class_spec_: with it set, pywin32 writes no PythonCOMPath and
     # the COM-launched pythonw.exe cannot import this module ("Unspecified
@@ -3641,7 +3642,7 @@ class PadController:
         self.props = {}
         atexit.register(self.bridge.dof_finish)    # DOF turns the toys off as it goes
         atexit.register(self.bridge.b2s_finish)
-        log("PAD.Controller created")
+        log("%s created" % PROGID)
 
     def __del__(self):
         """Visual Pinball let go of the controller (the table closed). PAD-1496:

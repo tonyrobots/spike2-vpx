@@ -67,6 +67,7 @@ import zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import controller_id  # noqa: E402
 import vpxfile  # noqa: E402
 import vpxsounds  # noqa: E402
 
@@ -1173,8 +1174,8 @@ def gen(m, had, quiet=None, dof=None):
             "\tIf IsObject(Controller) Then",
             "\t\tIf Not Controller Is Nothing Then Set PadB2S = Controller",
             "\tEnd If",
-            "\tSet Controller = CreateObject(\"PAD.Controller\")",
-            "\tIf Err Then MsgBox \"Can't load PAD.Controller: \" & Err.Description",
+            "\tSet Controller = CreateObject(%s)" % vb(controller_id.PROGID),
+            "\tIf Err Then MsgBox %s & Err.Description" % vb("Can't load %s: " % controller_id.PROGID),
             "\tController.GameName = %s" % vb(m["title"]),
             # PAD-1480: the B2S.Server LoadEM made, to PAD.Controller: DOF runs
             # inside it here, so the cabinet's E events (the shaker, the

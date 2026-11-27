@@ -33,7 +33,7 @@ ROWS = {
     "wslg": "WSLg display and audio",
     "runtime": "SPIKE 2 runtime",
     "vpx": "Visual Pinball X",
-    "controller": "PAD.Controller",
+    "controller": "Table controller",
 }
 
 
@@ -114,6 +114,7 @@ class Setup:
             self.settings = settings if isinstance(settings, dict) else {}
         except (OSError, ValueError):
             self.settings = {}
+        self.vr = "", "Setup has not checked Visual Pinball X yet."
 
     def save(self):
         with NamedTemporaryFile(mode="w", dir=self.data, encoding="utf-8",
@@ -286,10 +287,27 @@ class Setup:
         if version < vpxsetup.VPX_MIN:
             return Check("Needs attention", f"VPX {vpxsetup.dotted(version)} detected. "
                          f"Install version {vpxsetup.dotted(vpxsetup.VPX_MIN)} or newer.")
-        vr = self.vpx_executable(vr=True)
-        builds = (f"VR available ({vr.name})" if vr else
-                  "desktop only (VR needs " + next(p["name"] for p in vpxsetup.VPX_EXES if p["vr"]) + ")")
-        return Check("Ready", f"VPX {vpxsetup.dotted(version)} · {exe.parent} · {builds}")
+        runtime, why = self.vr_status()
+        return Check("Ready", f"VPX {vpxsetup.dotted(version)} · {exe.parent} · "
+                     + (f"VR ready ({runtime})" if runtime else f"VR unavailable. {why}"))
+
+    def vr_status(self):
+        """("<what drives the headset>", "") when VR can be played, else ("",
+        why not). Kept as `self.vr` for the UI, which must not re-read it."""
+        exe = self.vpx_executable(vr=True)
+        if exe is None:
+            gl = next(p["name"] for p in vpxsetup.VPX_EXES if p["vr"])
+            self.vr = "", f"The VPX folder has no {gl}."
+        else:
+            self.vr = vpxsetup.vr_runtime(str(exe.parent))
+        return self.vr
+
+    def vr_wanted(self):
+        return self.settings.get("vr") is True
+
+    def set_vr(self, on):
+        self.settings["vr"] = bool(on)
+        self.save()
 
     def check_controller(self):
         return self.controller("check")

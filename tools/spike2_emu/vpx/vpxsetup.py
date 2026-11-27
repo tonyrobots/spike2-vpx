@@ -12,6 +12,7 @@ for path in (HERE, RIG):
     if path not in sys.path:
         sys.path.insert(0, path)
 
+import controller_id  # noqa: E402
 import padcabinet  # noqa: E402
 import padisplay   # noqa: E402
 import padlaunch   # noqa: E402
@@ -33,7 +34,7 @@ def controller_registration():
     try:
         import winreg
         root = winreg.HKEY_CLASSES_ROOT
-        clsid = winreg.QueryValue(root, "PAD.Controller\\CLSID")
+        clsid = winreg.QueryValue(root, controller_id.PROGID + "\\CLSID")
         path = winreg.QueryValue(root, "CLSID\\%s\\PythonCOMPath" % clsid)
         server = winreg.QueryValue(root, "CLSID\\%s\\LocalServer32" % clsid)
     except Exception:                                       # noqa: BLE001
@@ -106,6 +107,63 @@ VPX_EXES = (
     {"name": "VPinballX64.exe", "build": "DirectX 9", "vr": False},
     {"name": "VPinballX_GL64.exe", "build": "OpenGL", "vr": True},
 )
+
+#: The VPX INI keys a launch of a VR-capable player sets, by whether it plays
+#: in VR, and puts back when VPX closes. [PlayerVR] AskToTurnOn: 0 = VR
+#: whenever a runtime is installed, 2 = never (VPX 10.8 player.cpp:126; its
+#: default is 0, so a desktop launch of the OpenGL build must say 2). The
+#: captures bring outside windows into the VR backbox (captureExt.cpp): the
+#: "Virtual DMD" window as its DMD, B2S/PUP as its backglass.
+VR_INI = {
+    True: {"PlayerVR": {"AskToTurnOn": 0}, "Player": {"CaptureExternalDMD": 1, "CapturePUP": 1}},
+    False: {"PlayerVR": {"AskToTurnOn": 2}},
+}
+
+def vr_runtime(folder):
+    """What would drive a headset for the VPX in *folder*, as ("<name>", "")
+    or ("", why VR cannot start). VPX loads the openvr_api64.dll beside it:
+    OpenComposite (a drop-in that turns OpenVR into OpenXR) needs an active
+    OpenXR runtime; Valve's loader needs the runtime SteamVR registers."""
+    try:
+        with open(os.path.join(folder or "", "openvr_api64.dll"), "rb") as f:
+            opencomposite = b"OpenComposite" in f.read()
+    except OSError:
+        opencomposite = False
+    if opencomposite:
+        xr = openxr_runtime()
+        if xr:
+            return "%s through OpenComposite" % xr, ""
+        return "", "OpenComposite is installed with VPX, but no OpenXR runtime is active."
+    if openvr_runtime():
+        return "SteamVR", ""
+    return "", "No VR runtime found. Install SteamVR, or OpenComposite with an OpenXR runtime."
+
+def openxr_runtime():
+    """The active OpenXR runtime's name (its manifest's, else its file's), or
+    "" when Windows names none or the manifest is gone."""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Khronos\OpenXR\1") as key:
+            manifest = winreg.QueryValueEx(key, "ActiveRuntime")[0]
+    except (ImportError, OSError):
+        return ""
+    if not manifest or not os.path.isfile(manifest):
+        return ""
+    try:
+        name = (json.load(open(manifest, encoding="utf-8")).get("runtime") or {}).get("name")
+    except (OSError, ValueError, AttributeError):
+        name = ""
+    return name or "OpenXR (%s)" % os.path.basename(manifest)
+
+def openvr_runtime():
+    """The OpenVR runtime folder SteamVR registered (openvrpaths.vrpath, what
+    Valve's loader reads), or "" when there is none."""
+    path = os.path.join(os.environ.get("LOCALAPPDATA") or "", "openvr", "openvrpaths.vrpath")
+    try:
+        runtimes = json.load(open(path, encoding="utf-8")).get("runtime") or []
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return next((r for r in runtimes if isinstance(r, str) and os.path.isdir(r)), "")
 
 def vpx_exe_names():
     return [p["name"] for p in VPX_EXES]

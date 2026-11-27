@@ -95,7 +95,7 @@ def test_rejects_prepared_table_for_another_edition(player, tmp_path, monkeypatc
     table = tmp_path / "Jaws (PAD).vpx"
     table.touch()
     monkeypatch.setattr(module.play_spike2, "embedded_script",
-                        lambda _: 'Controller.GameName = "jaws_le"\nCreateObject("PAD.Controller")')
+                        lambda _: 'Controller.GameName = "jaws_le"\nCreateObject("Spike2Vpx.Controller")')
     with pytest.raises(ValueError, match="prepared for jaws_le"):
         player.prepare_table(Game("godzilla_le", "card.raw"), table, Mock())
     assert not player.library()
@@ -194,6 +194,31 @@ def test_play_refuses_a_saved_image_replaced_with_another_title(player, tmp_path
     with pytest.raises(ValueError, match="different title"):
         player.play(Game("godzilla_le", "card.raw", "table.vpx"), Mock())
     launch.assert_not_called()
+
+
+def test_play_in_vr_refuses_plainly_when_vr_is_unavailable(player, tmp_path, monkeypatch):
+    from spike2_vpx import player as module
+
+    player.setup.settings["vr"] = True
+    player.setup.check_vpx = Mock(return_value=Mock(state="Ready"))
+    player.setup.vr_status = Mock(return_value=("", "No VR runtime found."))
+    launch = Mock()
+    monkeypatch.setattr(module.padlaunch, "Launch", launch)
+    with pytest.raises(ValueError, match="Play in VR is on, but VR is unavailable. No VR runtime found."):
+        player.play(Game("godzilla_le", "card.raw", "table.vpx"), Mock())
+    launch.assert_not_called()
+
+
+def test_play_in_vr_launches_the_vr_player(player, tmp_path, monkeypatch):
+    from spike2_vpx import player as module
+
+    player.setup.settings["vr"] = True
+    player.setup.check_vpx = Mock(return_value=Mock(state="Ready"))
+    player.setup.vr_status = Mock(return_value=("SteamVR", ""))
+    player.setup.vpx_executable = Mock(side_effect=lambda vr=False: None if vr else tmp_path / "VPinballX64.exe")
+    with pytest.raises(ValueError, match="Visual Pinball X folder"):
+        player.play(Game("godzilla_le", "card.raw", "table.vpx"), Mock())
+    player.setup.vpx_executable.assert_called_once_with(vr=True)
 
 
 def test_zip_import_extracts_one_verified_card_without_using_archive_paths(player, tmp_path, monkeypatch):
@@ -303,7 +328,7 @@ def test_play_defaults_to_borderless_fullscreen_on_a_spare_display(player, tmp_p
     monkeypatch.setattr(module.play_spike2, "check_controller", Mock())
     monkeypatch.setattr(module.play_spike2.padcontroller.Rig, "board_run", Mock(return_value=None))
     monkeypatch.setattr(module.play_spike2, "embedded_script", lambda _: (
-        'Controller.GameName = "godzilla_le"\nCreateObject("PAD.Controller")'))
+        'Controller.GameName = "godzilla_le"\nCreateObject("Spike2Vpx.Controller")'))
     monkeypatch.setattr(module.padlaunch, "Launch", Mock())
     path = tmp_path / "rig-board" / "display.conf"
 
@@ -459,7 +484,7 @@ def test_export_runs_from_another_folder_and_preserves_paths_and_exit_code(playe
     image.touch()
     table.touch()
     monkeypatch.setattr(module.play_spike2, "embedded_script", lambda _: (
-        'Controller.GameName = "godzilla_le"\nCreateObject("PAD.Controller")'))
+        'Controller.GameName = "godzilla_le"\nCreateObject("Spike2Vpx.Controller")'))
     player.inspect_image = Mock(return_value=Game("godzilla_le", str(image)))
     script = tmp_path / "Launch Godzilla.bat"
     player.export(Game("godzilla_le", str(image), str(table)), script)

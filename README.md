@@ -2,7 +2,10 @@
 
 Play Stern SPIKE 2 games with Visual Pinball X on Windows x64. VPX runs the
 playfield and the SPIKE 2 runtime runs the game, LCD, and audio. The bundled
-`PAD.Controller` connects them.
+`Spike2Vpx.Controller` connects them. It has its own name, so SPIKE 2 VPX and
+Pinball Asset Decryptor can be installed side by side. Tables prepared by 0.1.0
+use the old `PAD.Controller` name, and Play moves them to the new one the first
+time they're played.
 
 ## Download for Windows
 
@@ -74,8 +77,11 @@ The checklist also covers WSLg display and audio, Visual Pinball X 10.8+ x64,
 and the controller. **Get VPX** opens the VPX download page. After installing
 VPX, use **Choose VPX** to pick its folder if the app doesn't find it. Desktop
 play uses `VPinballX64.exe` (or `VPinballX_GL64.exe` if that's the only one
-there). VR uses `VPinballX_GL64.exe`, and the Setup row shows whether the
-folder has it.
+there). VR uses `VPinballX_GL64.exe` plus a VR runtime (SteamVR, or
+OpenComposite with an OpenXR runtime), and the Setup row shows whether VR is
+ready. When it is, tick **Play in VR** next to Play. VR support is in
+progress: the table plays in the headset, but the Stern LCD isn't shown there
+yet.
 Settings and setup logs are under `%LOCALAPPDATA%\Spike2Vpx`.
 
 Setup verifies that WSL can execute an ARM program inside a chroot. It

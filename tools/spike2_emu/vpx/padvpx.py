@@ -244,6 +244,29 @@ def vpx_ini_path():
     return os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "VPinballX", "VPinballX.ini")
 
 
+def vpx_ini_get(keys, section="Player", path=None):
+    """The values of `keys` in a section of Visual Pinball's ini, as written
+    there ("" for a key that has no line)."""
+    path = path or vpx_ini_path()
+    got = {k: "" for k in keys}
+    try:
+        with open(path, encoding="utf-8-sig", errors="surrogateescape") as file:
+            lines = file.read().split("\n")
+    except OSError:
+        return got
+    in_sect = False
+    for ln in lines:
+        s = ln.strip()
+        if s.startswith("[") and s.endswith("]"):
+            in_sect = s[1:-1].lower() == section.lower()
+        elif in_sect and "=" in s:
+            k, v = (part.strip() for part in s.split("=", 1))
+            for want in keys:
+                if k.lower() == want.lower():
+                    got[want] = v
+    return got
+
+
 def vpx_ini_set(keys, section="Player", path=None):
     """Set `keys` in a section of Visual Pinball's ini (`Key = Value` lines
     under `[Section]`), keeping everything else as it is."""
@@ -355,7 +378,8 @@ def status():
             pass
     try:
         import winreg
-        k = winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, "PAD.Controller\\CLSID")
+        from controller_id import PROGID
+        k = winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, PROGID + "\\CLSID")
         print("controller: registered (%s)" % winreg.QueryValue(k, None))
     except Exception:                                       # noqa: BLE001
         print("controller: open the SPIKE 2 VPX Setup window to register it")

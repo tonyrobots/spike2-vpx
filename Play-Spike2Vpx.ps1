@@ -8,6 +8,7 @@ param(
     [string]$Distro,
     [string]$Python,
     [Parameter(ParameterSetName = 'Card')][string]$AppGame,
+    [switch]$Vr,
     [ValidateRange(1, 3600)][int]$StartupTimeout = 180
 )
 
@@ -35,6 +36,7 @@ else { $launchArgs += @('--game-dir', $GameDir) }
 if ($VpxExe) { $launchArgs += @('--vpx-exe', $VpxExe) }
 if ($Distro) { $launchArgs += @('--distro', $Distro) }
 if ($AppGame) { $launchArgs += @('--app-game', $AppGame) }
+if ($Vr) { $launchArgs += @('--vr') }
 
 & $Python $launcher @launchArgs
 exit $LASTEXITCODE
