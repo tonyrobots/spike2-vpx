@@ -491,6 +491,19 @@ The original steps:
   each app in one folder shares one helper, and the last app to prepare or
   play it wins. Renaming it would need all four ROM patchers changed.
 
+### After the phase 3-4 commit
+
+- **VR runs saved the preview window as the desktop playfield placement.**
+  The controller's `_watch_player` saves where VPX's window settles as the
+  kit's `player`; in VR that window is VPX's 640x640 preview, so every
+  later desktop run was shrunk to 640 wide. That saving (inherited from
+  Pinball Asset Decryptor's hand-moved windowed player) is removed: in this
+  app `player` belongs to the cabinet layout and `padvpx player`. The
+  owner's bad value was removed by hand.
+- **Jurassic Park 30th LE has no VR room or cabinet models**, so in VR only
+  the playfield (and the added `PadVrLcd`) shows. A table matter; a VR-room
+  version of the table is the fix.
+
 ### Follow-ups outside VR
 
 - The `PADSPIKE2.vbs` name collision above.

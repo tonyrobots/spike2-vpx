@@ -3103,10 +3103,9 @@ class Bridge:
     # resize edges (WS_CAPTION | WS_THICKFRAME; Visual Pinball draws on into
     # the smaller client area), and after a resize the client area is snapped
     # back to the table's own proportions: Visual Pinball scales its picture
-    # to the window, so any other shape stretches it. Where it is left is
-    # saved as the kit's `player` (x, y of the window, w of the picture), so
-    # the next table opens there. `padvpx player frame off` turns the frame
-    # off again.
+    # to the window, so any other shape stretches it. Where it is left is not
+    # saved: the kit's `player` is set by the cabinet layout or `padvpx
+    # player`. `padvpx player frame off` turns the frame off again.
     #
     # PAD-845: the snap kept the WIDTH and set the height from it, so a drag
     # of the top or bottom edge (only the height changes) was put straight
@@ -3155,8 +3154,8 @@ class Bridge:
 
     def _watch_player(self):
         """After the user moves or resizes the playfield window: the picture's
-        proportions put back, and the place saved (once the mouse is up and
-        the window has been still for half a second)."""
+        proportions put back (once the mouse is up and the window has been
+        still for half a second)."""
         hwnd = getattr(self, "player_hwnd", 0)
         aspect = getattr(self, "player_aspect", None)
         if sys.platform != "win32" or not hwnd or not aspect or not self.player_placed:
@@ -3191,11 +3190,6 @@ class Bridge:
             filled = getattr(self, "_player_filled", None)
             if filled and max(abs(a - b) for a, b in zip(rect, filled)) > 4:
                 self._player_unfill = self._player_filled = None    # resized by hand since: forget it
-            kit = padlaunch.kit_load()
-            if (kit.get("player") or {}) != {"x": rect[0], "y": rect[1], "w": cw}:
-                kit["player"] = {"x": rect[0], "y": rect[1], "w": cw}
-                padlaunch.kit_save(kit)
-                log("player window left at %d,%d, %d wide: saved" % (rect[0], rect[1], cw))
         except Exception as exc:                            # noqa: BLE001
             log("player window watch failed: %s" % exc)
 
