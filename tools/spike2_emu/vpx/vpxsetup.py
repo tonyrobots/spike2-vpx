@@ -98,19 +98,47 @@ def registration_ok(com_path, server_cmd):
     return (bool(com_path) and os.path.isfile(os.path.join(com_path, "padcontroller.py"))
             and bool(exe) and os.path.isfile(exe))
 
+#: The Visual Pinball X players a VPX folder can hold, in order of preference
+#: for desktop play. VR exists only in the OpenGL build (VPX 10.8's stdafx.h
+#: defines ENABLE_VR only with ENABLE_SDL), so a VR launch takes the first
+#: one marked "vr".
+VPX_EXES = (
+    {"name": "VPinballX64.exe", "build": "DirectX 9", "vr": False},
+    {"name": "VPinballX_GL64.exe", "build": "OpenGL", "vr": True},
+)
+
+def vpx_exe_names():
+    return [p["name"] for p in VPX_EXES]
+
+def vpx_player(exe):
+    """The VPX_EXES entry for *exe* (matched by file name), or None when it
+    is not a player the app knows."""
+    name = os.path.basename(str(exe or "")).casefold()
+    return next((p for p in VPX_EXES if p["name"].casefold() == name), None)
+
+def vpx_exe_for(folder, vr=False):
+    """The player in *folder* for desktop play (the first known one there)
+    or, with *vr*, for VR (the first VR-capable one), as a path, or ""."""
+    for p in VPX_EXES:
+        exe = os.path.join(folder or "", p["name"])
+        if folder and (p["vr"] or not vr) and os.path.isfile(exe):
+            return exe
+    return ""
+
 def find_vpx(use_kit=True):
+    """The first folder that holds a known VPX player, or ""."""
     kit = padlaunch.kit_load().get("vpx") if use_kit else None
     for d in [kit, VPX_DEFAULT_DIR, os.path.join(os.environ.get("ProgramFiles", ""), "Visual Pinball"),
               os.path.join(os.path.expanduser("~"), "Visual Pinball")]:
-        if d and os.path.isfile(os.path.join(d, "VPinballX64.exe")):
+        if vpx_exe_for(d):
             return d
     return ""
 
-def vpx_version(folder):
-    """VPinballX64.exe's own file version in *folder*, as (major, minor,
-    patch), or None when it cannot be read (no exe, not Windows)."""
-    exe = os.path.join(folder or "", "VPinballX64.exe")
-    if not folder or not os.path.isfile(exe) or sys.platform != "win32":
+def vpx_version(exe):
+    """The VPX player *exe*'s own file version, as (major, minor, patch), or
+    None when it cannot be read (no exe, not Windows)."""
+    exe = str(exe or "")
+    if not exe or not os.path.isfile(exe) or sys.platform != "win32":
         return None
     try:
         import ctypes

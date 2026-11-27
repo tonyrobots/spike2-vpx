@@ -3,8 +3,13 @@
 Goal: play SPIKE 2 tables in a VR headset through Visual Pinball X 10.8's
 OpenGL build (`VPinballX_GL64.exe`), with the Stern LCD visible in the headset.
 
-Status: planning. Nothing is implemented yet. Phase 0 (a manual test on the
-Windows VR PC) comes next and decides how Phase 3 is built.
+Status: Phase 0 passed on 2026-11-26. The live Stern LCD showed in the VR
+backbox of JAWS 50th (PAD) and updated smoothly. See "Phase 0 results".
+Phase 1 is done. Setup saves the VPX **folder** (`vpx_dir`). An older
+`vpx_exe` is read as its folder, and it is still written (the desktop exe)
+because app 0.1.0 reads only that key. `vpxsetup.VPX_EXES` is the single
+list of players. `Setup.vpx_executable(vr=False)` picks DX9 for desktop play
+(GL if DX9 is missing) and GL for VR. Phase 2 is next.
 
 ## Background: how the app finds and launches VPX
 
@@ -84,6 +89,20 @@ Tag `v10.8.0-2051-28dd6c3` of https://github.com/vpinball/vpinball.
 - VR runs unthrottled (OpenVR sets the frame pace) and the pause menu is
   disabled in VR (`player.cpp:4367`).
 
+## The owner's VR PC: OpenComposite, not SteamVR
+
+- `VPinballX_GL64.exe` (Panasony build 10.8.0.2079) imports `openvr_api64.dll`.
+  In the VPX folder that DLL is **OpenComposite**: it translates OpenVR calls to
+  OpenXR. The real Valve loader has been renamed `openvr_api64_steam.dll`.
+- The active OpenXR runtime is Virtual Desktop
+  (`HKLM\SOFTWARE\Khronos\OpenXR\1` → `virtualdesktop-openxr.json`). SteamVR is
+  installed but isn't used.
+- VPX's code path doesn't change: `AskToTurnOn`, the capture keys and the
+  window-title lookup all behave the same.
+- What does change: Phase 2 must not check for "SteamVR installed". The check
+  should be a VR-capable exe plus any working OpenVR runtime (SteamVR, or
+  OpenComposite with an OpenXR runtime).
+
 ## The core problem
 
 For SPIKE 2 the Stern LCD *is* the game's main display. It's a WSLg desktop
@@ -123,6 +142,101 @@ SPIKE 2 table with a VR backbox (Aerosmith "with VR" is listed in the README).
 | VPX finds the window but the backbox is blank | The table's VR backbox doesn't use VPX's DMD texture; patch tables per title |
 | VPX never finds the window, or the capture is black | Option (b) |
 
+### Phase 0 results (2026-11-26)
+
+Setup: JAWS 50th (PAD), `VPinballX_GL64.exe` 10.8.0.2079 (Panasony) through
+OpenComposite and Virtual Desktop. Launched with
+`Play-Spike2Vpx.ps1 -Python "<app>\python\python.exe" -Distro SPIKE2-VPX ...`.
+The system Python lacks `olefile`. Monitors: main 0,0 2560x1440; 2nd
+-2560,468 2560x1440.
+
+- The playfield, controller, switches and game all work under the GL build in VR.
+- Renaming the LCD with `SetWindowTextW` works: `FindWindowA("Virtual DMD")`
+  returns it. The LCD's class is `RAIL_WINDOW` (shared by every WSLg window)
+  and its owner is `msrdc.exe`, so class lookup is useless.
+- With a windowed LCD fully inside one monitor, the whole LCD appeared in the
+  VR backbox and updated smoothly. It is squashed vertically because the
+  table's backbox DMD area is not 16:9. That is a per-table fix.
+- **How VPX's capture works** (`captureExt.cpp` in 10.8.0):
+  - It looks for the window by title until found, then keeps the **handle**.
+  - One second later it binds to the **monitor** the window is on, and stays
+    on that monitor for the rest of the session.
+  - Every frame it re-reads the window's rect, clamped to that monitor. Moving
+    the window within that monitor is followed live.
+  - A window bigger than its monitor gives an invalid copy region, and nothing
+    restarts a failed duplication.
+- What that means for us:
+  - The title only has to be `Virtual DMD` at the moment VPX finds the window.
+    WSLg and the renderer put the old title back whenever the window is
+    reconfigured; that is harmless once VPX has the handle.
+  - The window must already be on its final monitor when VPX finds it.
+- **A fullscreen LCD can never be captured.** Its `GetWindowRect` includes
+  32 px of invisible border on every side, so it is larger than its monitor.
+  VR mode needs a windowed LCD that fits inside one monitor.
+- **Bug: the windowed LCD lands in the wrong place on multi-monitor setups.**
+  `padisplay.save` writes x/y in Windows coordinates. `padglhost` uses them as
+  X root coordinates, whose origin is the virtual desktop's top-left (here
+  -2560,0). The window lands 2560 px too far left. The test used a hand-written
+  `display.conf` line (`x=740 y=700` gives Windows -1820,700).
+- **Desktop border around the captured LCD.** A windowed or Windows-placed LCD
+  has a 32 px transparent shadow margin inside its `GetWindowRect`, and the
+  capture shows the desktop through it.
+  - Fix, confirmed in the headset: **X-native fullscreen**. A display.conf
+    line with `fs=1` and the X-coordinate monitor rect (here `x=0 y=468
+    w=2560 h=1440`), without `PAD_WINDOWS_LCD`'s Windows-side fullscreen. The
+    window rect then equals the monitor exactly (-2560,468 to 0,1908), with
+    no margin.
+  - Cost: it takes up a whole monitor.
+  - Untested fallback for single-monitor VR setups: a borderless black window
+    just behind a windowed LCD, so the margin captures as black.
+  - The change from window to fullscreen applied live, and VPX kept capturing,
+    because the window stayed on the monitor VPX had bound to.
+- Moving the WSLg window from the Windows side doesn't hold: activation, or the
+  renderer re-applying display.conf, puts it back. Place it through display.conf.
+- **GOTG (PUP table), 2026-11-26.**
+  - VPX's DMD capture locked onto PUP's `PUPSCREEN5` (0,575 512x288). It
+    exists before a late LCD rename, and VPX keeps the first match for the
+    whole session.
+  - Capture copies screen pixels at the target window's rect, so anything
+    covering that rect shows in VR.
+  - A windowed LCD (display.conf `mode=window border=0 x=2560 y=575 w=512
+    h=288 fs=0`, in X coordinates) with its visible area exactly on PUP's rect
+    and kept topmost showed **perfectly**: no border, no squashing. GOTG's
+    backbox DMD area is presumably 16:9.
+  - `mode=window` also keeps `PAD_WINDOWS_LCD`'s Windows-side fullscreen off.
+    `play_spike2.py:229` turns it on for `mode=fullscreen`, and its 0.5 s
+    placement loop fights any other position.
+- **Phase 3 design, from these results: a placeholder target.**
+  - Before starting VPX, the launcher creates its own borderless Win32 window
+    titled `Virtual DMD` (no WSLg margin). It is first in VPX's search list, so
+    it beats PUP.
+  - The launcher places the windowed LCD so that its visible area exactly
+    covers that window, and keeps it topmost.
+  - The same path for PUP and non-PUP tables. Any monitor count. The LCD keeps
+    its title, so the lookups stay as they are.
+  - Needs the windowed-LCD coordinate fix.
+  - **Confirmed on GOTG, 2026-11-26.**
+    - Setup: a placeholder `WS_POPUP` window, `WS_EX_TOOLWINDOW |
+      WS_EX_NOACTIVATE`, black brush, titled `Virtual DMD`, created before
+      launch at 1500,100 1024x576, away from PUP's rect. The LCD's visible
+      area sat on it via display.conf (X `x=4060 y=100 w=1024 h=576`) and was
+      kept topmost.
+    - The full LCD showed in the VR backbox with no border, even with
+      `PUPSCREEN5` open.
+    - The LCD had to be raised to topmost 9 times during startup, so the
+      launcher must keep doing that.
+    - **The target rect must lie fully inside one monitor.** At first it ran
+      64 px past the main screen's right edge. VPX clamps the copy to the
+      monitor, so the image came out shifted. After moving it 100 px left it
+      was perfect, and VPX followed both moves live.
+    - The script used: `docs/vr-phase0/placeholder.py`.
+  - The backbox DMD aspect stays per table (JAWS squashes, GOTG fits).
+- Earlier choice for Phase 3, replaced by the placeholder design above: option (a), without the mirror window. The launcher puts
+  the LCD in a windowed spot that fits inside one monitor, then gives it the
+  `Virtual DMD` title once before VPX starts searching. `padglhost` setting the
+  title in VR mode is the cleaner version. Either way, the LCD lookup has to
+  stop depending on the title (keep the handle).
+
 ### Phase 1: accept either exe
 
 - In `vpxsetup`, keep one list of known VPX exes, with the build type as data,
@@ -153,7 +267,27 @@ SPIKE 2 table with a VR backbox (Aerosmith "with VR" is listed in the README).
 - **(b)** A small Windows-side mirror window titled `Virtual DMD` that shows
   the LCD frames.
 - Per table: check that the VR backbox shows VPX's DMD texture, given that
-  FlexDMD/UltraDMD are stubbed.
+  FlexDMD/UltraDMD are stubbed. Fix the aspect ratio of the backbox DMD area,
+  which isn't 16:9 (JAWS squashes the LCD vertically). Not yet looked at how the
+  table defines that area. Likely fix: patch its size in `vpxshadow`, with the
+  size per table as data.
+- **Systematic fix for squashed backboxes such as JAWS (for later).**
+  - In 10.8 the VR backbox DMD is a Flasher with `IDMD` set
+    (`flasher.cpp:398`). VPX stretches the captured texture over the
+    flasher's shape, which comes from its corner (drag) points. Those points
+    can't be changed from the script.
+  - Step 1: read the shape automatically. When patching, `vpxshadow` finds
+    the `IDMD` flasher and takes the aspect ratio of its corner points'
+    bounding box (to check: flasher rotation).
+  - Option 1, the default (no table edits): **letterbox in the capture.**
+    Give the placeholder window the flasher's aspect and centre the 16:9 LCD
+    inside it. The placeholder is black, so the bars come out black. The
+    picture is correct but doesn't fill the whole area.
+  - Option 2, opt-in per table as data: **reshape the flasher.** Change its
+    corner points in the patched copy to 16:9, keeping the centre. It fills
+    the area, but it may overlap the backbox art, so check it per table.
+- Fix the windowed-LCD coordinate bug (X root vs Windows coordinates) in
+  `padisplay` before relying on a windowed LCD.
 
 ### Phase 4: polish
 
@@ -168,7 +302,14 @@ supported-tables list.
    global VPX config. Recommendation: write to the real INI. Not yet answered.
    (The existing B2S-disabled path has the same issue, and VR combined with
    disabled B2S would lose tweaks.)
-2. Where the VR setting lives in the UI.
+2. Where the VR setting lives in the UI. Proposed (2026-11-26):
+   - A remembered "Play in VR" checkbox beside Play on the Games page.
+   - Disabled, with a one-line reason, when the folder has no GL exe or no VR
+     runtime is installed.
+   - Export launch script and cabinet mode follow it.
+   - No exe choice anywhere in the UI.
+
+   Waiting for the owner's OK.
 
 ## Notes for the next session
 

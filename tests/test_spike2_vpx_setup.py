@@ -133,7 +133,55 @@ class StandaloneSetupTest(unittest.TestCase):
         with patch.object(setup.vpxsetup, "vpx_version", side_effect=[(10, 7, 4), (10, 8, 0)]):
             self.assertEqual(self.app.check_vpx().state, "Needs attention")
             self.assertEqual(self.app.check_vpx().state, "Ready")
-        self.assertIn(path.name, self.app.settings_path.read_text())
+        self.assertEqual(self.app.settings["vpx_dir"], str(path.parent.resolve()))
+
+    def test_one_folder_gives_directx_for_desktop_and_opengl_for_vr(self):
+        folder = Path(self.app.data).resolve()
+        dx9, gl = folder / "VPinballX64.exe", folder / "VPinballX_GL64.exe"
+        dx9.touch()
+        gl.touch()
+        self.app.choose_vpx(folder)
+        self.assertEqual(self.app.vpx_executable(), dx9)
+        self.assertEqual(self.app.vpx_executable(vr=True), gl)
+        self.assertEqual(self.app.settings["vpx_exe"], str(dx9))   # what app 0.1.0 reads
+        with patch.object(setup.vpxsetup, "vpx_version", return_value=(10, 8, 0)) as version:
+            check = self.app.check_vpx()
+        version.assert_called_once_with(dx9)
+        self.assertEqual(check.state, "Ready")
+        self.assertIn("VR available", check.detail)
+
+    def test_a_folder_without_opengl_is_desktop_only(self):
+        folder = Path(self.app.data).resolve()
+        (folder / "VPinballX64.exe").touch()
+        self.app.choose_vpx(folder / "VPinballX64.exe")       # picking a player picks its folder
+        self.assertIsNone(self.app.vpx_executable(vr=True))
+        with patch.object(setup.vpxsetup, "vpx_version", return_value=(10, 8, 0)):
+            self.assertIn("desktop only (VR needs VPinballX_GL64.exe)", self.app.check_vpx().detail)
+
+    def test_opengl_alone_serves_desktop_and_vr(self):
+        folder = Path(self.app.data).resolve()
+        (folder / "VPinballX_GL64.exe").touch()
+        self.app.choose_vpx(folder)
+        self.assertEqual(self.app.vpx_executable(), folder / "VPinballX_GL64.exe")
+        self.assertEqual(self.app.vpx_executable(vr=True), folder / "VPinballX_GL64.exe")
+
+    def test_choose_vpx_refuses_a_folder_without_a_player(self):
+        (self.app.data / "VPinballX.exe").touch()
+        with self.assertRaisesRegex(ValueError, "no VPinballX64.exe or VPinballX_GL64.exe"):
+            self.app.choose_vpx(self.app.data)
+        self.assertNotIn("vpx_dir", self.app.settings)
+
+    def test_an_older_saved_exe_is_read_as_its_folder(self):
+        folder = Path(self.app.data).resolve()
+        (folder / "VPinballX64.exe").touch()
+        (folder / "VPinballX_GL64.exe").touch()
+        self.app.settings["vpx_exe"] = str(folder / "VPinballX64.exe")
+        self.assertEqual(self.app.vpx_executable(vr=True), folder / "VPinballX_GL64.exe")
+
+    def test_players_are_matched_by_name_whatever_the_case(self):
+        self.assertTrue(setup.vpxsetup.vpx_player("C:/VPX/vpinballx_gl64.EXE")["vr"])
+        self.assertIsNone(setup.vpxsetup.vpx_player("C:/VPX/VPinballX.exe"))
+        self.assertEqual(setup.vpxsetup.vpx_exe_for(""), "")
 
     def test_controller_probe_never_offers_to_take_over_another_installation(self):
         with patch.object(setup, "run", side_effect=[

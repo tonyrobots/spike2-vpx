@@ -49,13 +49,13 @@ def read_title(table, script=None):
 
 
 def resolve_vpx(exe):
-    if not exe:
-        from vpxsetup import find_vpx
+    from vpxsetup import find_vpx, vpx_exe_for, vpx_exe_names
 
-        folder = find_vpx()
-        exe = Path(folder) / "VPinballX64.exe" if folder else None
+    if not exe:
+        found = vpx_exe_for(find_vpx())
+        exe = Path(found) if found else None
     if not exe or not exe.is_file():
-        raise ValueError("Pass the path to VPinballX64.exe with -VpxExe.")
+        raise ValueError("Pass the path to %s with -VpxExe." % " or ".join(vpx_exe_names()))
     return exe.resolve()
 
 

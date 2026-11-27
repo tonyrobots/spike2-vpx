@@ -12,6 +12,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools" / "spike2_e
 import play_spike2 as play  # noqa: E402
 
 
+class ResolveVpxTest(unittest.TestCase):
+    def test_a_folder_with_only_the_opengl_player_is_found(self):
+        import vpxsetup
+
+        with TemporaryDirectory() as folder:
+            gl = Path(folder) / "VPinballX_GL64.exe"
+            gl.touch()
+            with patch.object(vpxsetup, "find_vpx", return_value=folder):
+                self.assertEqual(play.resolve_vpx(None), gl.resolve())
+            with patch.object(vpxsetup, "find_vpx", return_value=""), \
+                    self.assertRaisesRegex(ValueError, "VPinballX64.exe or VPinballX_GL64.exe"):
+                play.resolve_vpx(None)
+
+
 class PreparedLaunchTest(unittest.TestCase):
     def setUp(self):
         logs = TemporaryDirectory()

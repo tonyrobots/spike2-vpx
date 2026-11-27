@@ -83,6 +83,11 @@ def elevated(exe, args, timeout):
                 encoded], timeout=timeout)
 
 
+def vpx_names():
+    """The known VPX players for messages: "A or B"."""
+    return " or ".join(vpxsetup.vpx_exe_names())
+
+
 def distro_registration():
     record = wsl_up.distribution_record(DISTRO)
     if record is None:
@@ -120,11 +125,18 @@ class Setup:
         finally:
             temporary.unlink(missing_ok=True)
 
-    def choose_vpx(self, exe):
-        exe = Path(exe).resolve()
-        if exe.name.casefold() != "vpinballx64.exe" or not exe.is_file():
-            raise ValueError("Select VPinballX64.exe from the Visual Pinball X installation.")
-        self.settings["vpx_exe"] = str(exe)
+    def choose_vpx(self, path):
+        """Save the Visual Pinball X folder: *path* is the folder, or one of
+        the players in it."""
+        folder = Path(path).resolve()
+        if folder.is_file() and vpxsetup.vpx_player(folder):
+            folder = folder.parent
+        if not vpxsetup.vpx_exe_for(str(folder)):
+            raise ValueError(f"That folder has no {vpx_names()}. "
+                             "Choose the folder Visual Pinball X is installed in.")
+        self.settings["vpx_dir"] = str(folder)
+        # app 0.1.0 reads only vpx_exe, and shares this file with newer versions
+        self.settings["vpx_exe"] = vpxsetup.vpx_exe_for(str(folder))
         self.save()
 
     def check_wsl(self):
@@ -244,25 +256,40 @@ class Setup:
                          "Enable GUI applications in WSL settings, restart WSL, then check again.")
         return Check("Ready", "The SPIKE 2 runtime can see the WSLg display and audio sockets.")
 
-    def vpx_executable(self):
-        saved = self.settings.get("vpx_exe")
-        folder = Path(saved).parent if isinstance(saved, str) and saved else vpxsetup.find_vpx(use_kit=False)
-        return Path(folder) / "VPinballX64.exe" if folder else None
+    def vpx_folder(self):
+        """The chosen Visual Pinball X folder (an older setup.json saved an
+        exe: its folder), else the first one found."""
+        saved = self.settings.get("vpx_dir")
+        if isinstance(saved, str) and saved:
+            return Path(saved)
+        legacy = self.settings.get("vpx_exe")
+        if isinstance(legacy, str) and legacy:
+            return Path(legacy).parent
+        found = vpxsetup.find_vpx(use_kit=False)
+        return Path(found) if found else None
+
+    def vpx_executable(self, vr=False):
+        """The player to launch from the VPX folder: desktop play, or VR."""
+        folder = self.vpx_folder()
+        exe = vpxsetup.vpx_exe_for(str(folder), vr) if folder else ""
+        return Path(exe) if exe else None
 
     def check_vpx(self):
         exe = self.vpx_executable()
         if exe is None or not exe.is_file():
             return Check("Missing", "Install Visual Pinball X 10.8 or newer (Windows x64), "
-                         "then select VPinballX64.exe.")
-        folder = exe.parent
-        version = vpxsetup.vpx_version(folder)
+                         "then choose its folder.")
+        version = vpxsetup.vpx_version(exe)
         if version is None:
-            return Check("Needs attention", "Windows could not read the VPX version. "
-                         "Select a compatible VPinballX64.exe.")
+            return Check("Needs attention", f"Windows could not read the version of {exe.name}. "
+                         "Choose a folder with a compatible Visual Pinball X.")
         if version < vpxsetup.VPX_MIN:
             return Check("Needs attention", f"VPX {vpxsetup.dotted(version)} detected. "
                          f"Install version {vpxsetup.dotted(vpxsetup.VPX_MIN)} or newer.")
-        return Check("Ready", f"VPX {vpxsetup.dotted(version)} · {folder}")
+        vr = self.vpx_executable(vr=True)
+        builds = (f"VR available ({vr.name})" if vr else
+                  "desktop only (VR needs " + next(p["name"] for p in vpxsetup.VPX_EXES if p["vr"]) + ")")
+        return Check("Ready", f"VPX {vpxsetup.dotted(version)} · {exe.parent} · {builds}")
 
     def check_controller(self):
         return self.controller("check")

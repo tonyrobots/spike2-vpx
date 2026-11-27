@@ -72,7 +72,10 @@ nested virtualization enabled on its host.
 
 The checklist also covers WSLg display and audio, Visual Pinball X 10.8+ x64,
 and the controller. **Get VPX** opens the VPX download page. After installing
-VPX, use **Choose VPX** if the app needs help locating `VPinballX64.exe`.
+VPX, use **Choose VPX** to pick its folder if the app doesn't find it. Desktop
+play uses `VPinballX64.exe` (or `VPinballX_GL64.exe` if that's the only one
+there). VR uses `VPinballX_GL64.exe`, and the Setup row shows whether the
+folder has it.
 Settings and setup logs are under `%LOCALAPPDATA%\Spike2Vpx`.
 
 Setup verifies that WSL can execute an ARM program inside a chroot. It

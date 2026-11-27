@@ -1131,14 +1131,12 @@ class PlayerWindow:
                    "Setting up this PC… Windows may ask for administrator permission.")
 
     def choose_vpx(self):
-        exe = filedialog.askopenfilename(parent=self.root, title="Choose Visual Pinball X",
-                                         filetypes=[("Visual Pinball X", "VPinballX64.exe"),
-                                                    ("Executables", "*.exe")])
-        if not exe:
+        folder = filedialog.askdirectory(parent=self.root, title="Choose the Visual Pinball X folder")
+        if not folder:
             return
 
         def work():
-            self.setup.choose_vpx(exe)
+            self.setup.choose_vpx(folder)
             return self.setup.checks()
 
         self.start(work, self.show_checks, "Checking the selected VPX installation…")
