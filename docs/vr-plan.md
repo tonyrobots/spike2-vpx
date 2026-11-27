@@ -3,7 +3,10 @@
 Goal: play SPIKE 2 tables in a VR headset through Visual Pinball X 10.8's
 OpenGL build (`VPinballX_GL64.exe`), with the Stern LCD visible in the headset.
 
-Status (2026-11-26):
+Status (2026-11-27). Branch `vr-support`, last commits `8dcd3d302`
+(phases 3-4), `40be32166` (controller no longer saves the window
+placement), `043293fcd` (score displays hidden, hidden VR-room DMDs shown,
+Deadpool placement). Nothing pushed.
 
 - **Phase 0 passed.** The live Stern LCD showed in the VR backbox, using a
   placeholder `Virtual DMD` window with the LCD kept on top of it.
@@ -17,13 +20,34 @@ Status (2026-11-26):
   gets the keyboard by itself.
 - **Phase 3 is done:** the LCD in the headset, checked by the owner in the
   headset on JAWS and GOTG.
-- **Phase 4's backbox fit is done:** DMD flashers fitted to 16:9 and made
-  opaque, placed per table from the map, and a VR-only LCD added to tables
-  without a VR room. The owner checked JAWS, GOTG, John Wick and Godzilla
-  in the headset. Still to do from Phase 4: the B2S backglass check, the
-  README VR section, and a "VR verified" column.
+- **Phase 4's backbox fit is done:** DMD flashers fitted to 16:9, made
+  opaque and visible, placed per table from the map, and a VR-only LCD
+  added to tables without a VR room. The UI is "Enable VR" beside Play;
+  ticked, the button reads "Play in VR".
+- **Headset results (owner):**
 
-See "Plan" below.
+  | Table (download) | VR |
+  |---|---|
+  | JAWS 50th (Marty02 VR) | good, map placed |
+  | GOTG 2.1.1 | good, map placed (both GOTG maps) |
+  | John Wick | good, LCD added |
+  | Godzilla LE | good, LCD added |
+  | Jurassic Park Pro LE 4.02 (JPSalas & marty) | good, LCD added |
+  | Deadpool, VR_Room_JPs_Deadpool_1.8 | good, map places the LCD over the backglass |
+  | Jurassic Park 30th LE (RebelB) | not supported: photographed playfield, flat in VR |
+
+- **Next, in the owner's agreed order:**
+  1. A VR column in the README's supported-tables list from the table
+     above (others "Untested"), maybe used by the app later.
+  2. A README VR section: needs, the checkbox, what first VR play changes
+     in the table file, per-table `vr_backbox` placement.
+  3. Owner checks: B2S backglass in a VR backbox; one monitor (Win+P "PC
+     screen only", then "Extend"; note whether Virtual Desktop adds a
+     virtual monitor while streaming).
+  4. Follow-ups outside VR (see "Follow-ups outside VR" below, plus the
+     ~10 s Start delay with overlap startup).
+
+See "Plan" below; "Notes for the next session" is at the end.
 
 ## Background: how the app found and launched VPX (before Phase 1)
 
@@ -534,6 +558,10 @@ The original steps:
 - The Windows-side fullscreen LCD (`PAD_WINDOWS_LCD`) leaves WSLg's 32 px
   shadow margin outside the monitor. That's harmless on the desktop, but it's
   why that LCD can't be captured.
+- The VR INI put-back writes `Key = ` for keys that were absent before,
+  instead of removing them.
+- With overlap startup (Stern lighting off), VPX and the LCD come up
+  together and Start does nothing for about 10 s (owner, before Phase 3).
 
 ## Decisions
 
@@ -561,8 +589,13 @@ The original steps:
    True`) shows it in VR only. Added once, on VR Play, re-signed and
    verified; a map's `vr_backbox` places it like any other. Checked on
    copies of John Wick and Godzilla: one item added, the script otherwise
-   the same, both verify, and a second run does nothing. Not yet seen in
+   the same, both verify, and a second run does nothing. Seen working in
    the headset.
+8. **A table's own flasher score display is hidden on every Play**, desktop
+   and VR (`scoredisplay`), not as a VR step (owner, 2026-11-27).
+9. **Fix causes by deleting code where possible** (owner, 2026-11-27): the
+   controller's saving of the VPX window placement was removed rather than
+   undone after VR runs.
 
 Still open: nothing.
 
@@ -581,4 +614,22 @@ Still open: nothing.
   - Setup registers `Spike2Vpx.Controller` to the checkout it runs from,
     with an administrator prompt. Pinball Asset Decryptor keeps
     `PAD.Controller`.
-- Tests: a venv with `requirements-dev.txt`, then `python -m pytest -q`.
+- Tests: a venv with `requirements-dev.txt`, then `python -m pytest -q`
+  (146 passed, 2 skipped at `043293fcd`). The controller COM server loads
+  from this checkout (`PythonCOMPath`), so controller changes apply on the
+  next game.
+- Where things are: VR fitting `tools/spike2_emu/vpx/vrfit.py`, score
+  display `scoredisplay.py`, capture window `vpx_lcd.py` (`VrLcd`,
+  `CaptureTarget`), launch `play_spike2.py` (`play`, `fit_for_vr`,
+  `hide_score_display`), app `spike2_vpx/player.py`. Per-table VR data is
+  each map's `vr_backbox` (`jaws_le`, `guardians`, `guardians_le`,
+  `deadpool_pro`).
+- Owner's tables are in `D:\Pinball\Virtual Pinball - Panasony install\tables`;
+  VPX 10.8.0.2079 (Panasony) in `...\VPinballX_20260308\VPinballX`, INI at
+  `%APPDATA%\VPinballX\VPinballX.ini`. VPX source used: tag
+  `v10.8.0-2051-28dd6c3` (`flasher.cpp`, `primitive.cpp`, `backGlass.cpp`,
+  `captureExt.cpp`, `textbox.cpp`, `math/matrix.h`).
+- To place an LCD from the table rather than by eye, read the backbox
+  panel's texture window or the backglass primitive and map it into the
+  DMD flasher's plane (method in the JAWS and Deadpool notes above). Keep
+  table specifics and history in maps and this file, not in code.
