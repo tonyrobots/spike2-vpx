@@ -10,8 +10,10 @@ game runs - a change moves the window at once, no restart:
     game monitor=2 mode=fullscreen border=0 rx=0 ry=0 x=3840 y=0 w=1920 h=1080 fs=1
 
 `monitor`, `mode`, `rx`/`ry` (the rectangle's corner on its monitor) are the
-choice as the user made it; `x y w h fs` are what padglhost acts on, in
-Windows' physical desktop pixels (which under WSLg are X root coordinates).
+choice as the user made it; `x y w h fs` are what padglhost acts on, in X
+root coordinates: Windows' physical desktop pixels counted from the virtual
+desktop's top-left (x_origin), which is 0,0 only when no monitor is left of
+or above the main one.
 The Windows side resolves the one into the other because only it knows the
 monitors; a cabinet whose screens change is resolved again by saving again.
 
@@ -118,9 +120,11 @@ def load(path=CONF):
     return out
 
 
-def resolve(setting, mons=None):
-    """The game line for a setting, against the monitors now; None = free.
-    A monitor that is not there any more falls back to the main one."""
+def place(setting, mons=None):
+    """Where a setting puts the game window, against the monitors now, in
+    Windows' physical desktop pixels: {"monitor", "rx", "ry", "x", "y", "w",
+    "h", "fs", "border"}; None = free. A monitor that is not there any more
+    falls back to the main one."""
     s = dict(setting)
     if s.get("mode", "free") == "free":
         return None
@@ -136,8 +140,28 @@ def resolve(setting, mons=None):
         w = int(s.get("w") or min(1360, mon["w"]))
         h = int(s.get("h") or min(768, mon["h"]))
         x, y, fs = mon["x"] + rx, mon["y"] + ry, 0
+    return {"monitor": mon["n"], "rx": rx, "ry": ry, "x": x, "y": y, "w": w, "h": h,
+            "fs": fs, "border": border}
+
+
+def x_origin(mons):
+    """Where X's root (0, 0) is on the Windows desktop. WSLg's root spans the
+    whole virtual desktop from its top-left, so a monitor left of or above
+    the main one makes it negative."""
+    return min(m["x"] for m in mons), min(m["y"] for m in mons)
+
+
+def resolve(setting, mons=None):
+    """The game line for a setting: place()'s rectangle, with x y in X root
+    coordinates, which padglhost moves the window to."""
+    mons = mons or monitors()
+    p = place(setting, mons)
+    if p is None:
+        return None
+    ox, oy = x_origin(mons)
     return ("game monitor=%d mode=%s border=%d rx=%d ry=%d x=%d y=%d w=%d h=%d fs=%d"
-            % (mon["n"], s["mode"], border, rx, ry, x, y, w, h, fs))
+            % (p["monitor"], setting["mode"], p["border"], p["rx"], p["ry"],
+               p["x"] - ox, p["y"] - oy, p["w"], p["h"], p["fs"]))
 
 
 def for_rect(rect, mons):

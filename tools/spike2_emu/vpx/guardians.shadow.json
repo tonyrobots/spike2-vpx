@@ -243,6 +243,10 @@
     "LeftSlingShot",
     "RightSlingShot"
   ],
+  "vr_backbox": {
+    "_": ["VR: the backbox DMD, 26 wider than the automatic fit (625 wide, x 475.8, bottom 474.2), growing upwards."],
+    "DMD": {"width": 651, "x": 475.8, "bottom": 474.2}
+  },
   "repatch": [
     {"old": "Sub AddScore(points) dim multiplierVal", "why": "Visual Pinball stops on a script error the first time the table scores", "since": "PAD-976: the table's own scoring stays quiet"},
     {"old": "Set LampCallback = GetRef(\"PadUpdateLamps\") End Sub", "why": "the playfield stays dark and the dome flashers never stop", "since": "PAD-1093: the table's attract look ends once it is up, and its GI follows the machine's"},

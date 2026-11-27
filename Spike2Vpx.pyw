@@ -46,6 +46,9 @@ def configure_style(root):
                     font=("Segoe UI", 12, "bold"))
     style.map("Primary.TButton", background=[("disabled", SURFACE), ("active", "#acf1e1")],
               bordercolor=[("focus", TEXT)])
+    # clam lights a checkbox's background when it is disabled or hovered: a pale box on the dark window
+    style.map("TCheckbutton", background=[("disabled", BACKGROUND), ("active", BACKGROUND)],
+              foreground=[("disabled", "#8595a8")])
     style.configure("GameCard.TButton", anchor="w", justify="left", padding=(12, 10),
                     background=SURFACE, font=("Segoe UI", 11))
     style.map("GameCard.TButton", background=[("active", "#35475d")], bordercolor=[("focus", ACCENT)])
@@ -238,7 +241,7 @@ class PlayerWindow:
         self.export_button.pack(side="left", padx=(8, 0))
         # VR is a play-time choice, remembered; shown once Setup finds a VR player
         self.vr_var = tk.BooleanVar(value=self.setup.vr_wanted())
-        self.vr_check = ttk.Checkbutton(actions, text="Play in VR", variable=self.vr_var, command=self.toggle_vr)
+        self.vr_check = ttk.Checkbutton(actions, text="Enable VR", variable=self.vr_var, command=self.toggle_vr)
         self.play_hint = ttk.Label(detail, style="Hint.TLabel", wraplength=440, justify="left")
         self.play_hint.pack(anchor="w", pady=(0, 8), before=image)
         self.vpx_hint = ttk.Label(detail, style="Hint.TLabel", wraplength=440, justify="left")
@@ -816,8 +819,9 @@ class PlayerWindow:
         vpx = self.checks.get("vpx")
         runtime, why = self.setup.vr
         has_vr_player = self.setup.vpx_executable(vr=True) is not None
-        if has_vr_player or self.vr_var.get():
-            self.vr_check.pack(side="left", padx=(12, 0))
+        # only beside Play: not while a game is being added, located or set up
+        if self.game_action == self.play and (has_vr_player or self.vr_var.get()):
+            self.vr_check.pack(side="left", padx=(12, 0), after=self.export_button)
         else:
             self.vr_check.pack_forget()
         # off is always allowed, so a broken VR setup never blocks play
@@ -850,7 +854,8 @@ class PlayerWindow:
             return "Review cabinet layout", lambda: self.open_tab(self.cabinet_page), str(exc)
         done = ("Playing in VR: put on your headset. Close VPX to end the game." if self.vr_var.get()
                 else "Close VPX to end the game.")
-        return ("Try again" if self.same_game(self.game, self.launch_error_game) else "Play"), self.play, (
+        play = "Play in VR" if self.vr_var.get() else "Play"
+        return ("Try again" if self.same_game(self.game, self.launch_error_game) else play), self.play, (
             "\n".join(warnings) or done)
 
     def next_game_step(self):
@@ -861,7 +866,7 @@ class PlayerWindow:
             self.setup.set_vr(self.vr_var.get())
         except OSError as exc:
             self.vr_var.set(self.setup.vr_wanted())
-            messagebox.showerror("Play in VR", str(exc), parent=self.root)
+            messagebox.showerror("Enable VR", str(exc), parent=self.root)
         self.update_buttons()
 
     def open_tab(self, page):

@@ -271,9 +271,14 @@ def vpx_ini_set(keys, section="Player", path=None):
     """Set `keys` in a section of Visual Pinball's ini (`Key = Value` lines
     under `[Section]`), keeping everything else as it is."""
     path = path or vpx_ini_path()
+    newline, encoding = "\n", "utf-8"
     try:
-        with open(path, encoding="utf-8-sig", errors="surrogateescape") as file:
-            lines = file.read().split("\n")
+        with open(path, "rb") as file:
+            raw = file.read()
+        # Written back as it was found: VPX writes CRLF, and a BOM if it had one.
+        newline = "\r\n" if b"\r\n" in raw else "\n"
+        encoding = "utf-8-sig" if raw.startswith(b"\xef\xbb\xbf") else "utf-8"
+        lines = raw.decode("utf-8-sig", errors="surrogateescape").replace("\r\n", "\n").split("\n")
     except OSError:
         lines = []
     out, in_sect, seen, done = [], False, set(), False
@@ -303,7 +308,7 @@ def vpx_ini_set(keys, section="Player", path=None):
             if k not in seen:
                 out.append("%s = %s" % (k, v))
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8", errors="surrogateescape", newline="\n") as file:
+    with open(path, "w", encoding=encoding, errors="surrogateescape", newline=newline) as file:
         file.write("\n".join(out))
     return path
 

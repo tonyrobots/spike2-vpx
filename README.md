@@ -79,9 +79,15 @@ VPX, use **Choose VPX** to pick its folder if the app doesn't find it. Desktop
 play uses `VPinballX64.exe` (or `VPinballX_GL64.exe` if that's the only one
 there). VR uses `VPinballX_GL64.exe` plus a VR runtime (SteamVR, or
 OpenComposite with an OpenXR runtime), and the Setup row shows whether VR is
-ready. When it is, tick **Play in VR** next to Play. VR support is in
-progress: the table plays in the headset, but the Stern LCD isn't shown there
-yet.
+ready. When it is, tick **Enable VR** next to Play; the button then says
+**Play in VR**. In VR the Stern LCD
+opens as a borderless window centred on the LCD screen (or the main screen),
+and VPX shows it in the table's backbox. Leave that window uncovered while you
+play. The first time you play a table in VR, its backbox DMD is reshaped to
+the LCD's 16:9 and made opaque in the table file, keeping its width and
+bottom edge and growing upwards, so it may cover some backbox art. A table without a backbox
+DMD (no VR room) gets a large LCD added where the backbox would stand, shown
+only in VR.
 Settings and setup logs are under `%LOCALAPPDATA%\Spike2Vpx`.
 
 Setup verifies that WSL can execute an ARM program inside a chroot. It

@@ -319,6 +319,12 @@
       "PadUpperPfRadio": {"leds": [[9, 86]], "name": "UPPER PF RADIO (PAD-1331: the deck's upper red circle)", "clone": "Light14", "at": [85, 342], "round": true, "fields": {"RADI": 16.0}}
     }
   },
+  "vr_backbox": {
+    "_": ["VR: the backbox DMD over the black screen window of PinCab_DMD's texture (Pincab_DMD_Jaws, pixels 241-767 x 94-391",
+      "of 1005x416), mapped through that panel's corners into the flasher's plane: 648 wide, x 464, bottom 470.5, 383 tall.",
+      "At 16:9 the picture fills the full height (681 x 383) and overhangs the window's sides by about 16 each."],
+    "DMD": {"width": 681, "x": 464, "bottom": 470.5}
+  },
   "round_lights": ["gi001", "gi006", "gi002", "gi003", "gi004", "gi005", "gi008", "gi1", "gi2", "gi4", "gi5"],
   "item_fields": {
     "_": ["PAD-1339: the sling GI pairs gi1/gi2 and gi4/gi5 (falloff 230) each lit half a circle, cut along a straight line 31-41 units from",

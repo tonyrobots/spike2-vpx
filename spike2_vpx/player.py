@@ -407,8 +407,8 @@ class Player:
         if vr:
             runtime, why = self.setup.vr_status()
             if not runtime:
-                raise ValueError(f"Play in VR is on, but VR is unavailable. {why} "
-                                 "Turn off Play in VR to play on the desktop.")
+                raise ValueError(f"Enable VR is on, but VR is unavailable. {why} "
+                                 "Turn off Enable VR to play on the desktop.")
         exe = self.setup.vpx_executable(vr=vr)
         if exe is None:
             raise ValueError("Choose a compatible Visual Pinball X folder in Setup.")
@@ -422,6 +422,9 @@ class Player:
         title = play_spike2.read_title(table, script)
         for line in play_spike2.own_controller(table, script):
             self.setup.log.info("%s", line)
+        if vr:
+            for line in play_spike2.fit_for_vr(table, title):
+                self.setup.log.info("%s", line)
         monitors = padisplay.monitors()
         layout = self.layout(monitors)
         roles = cabinet.resolve(layout, monitors)

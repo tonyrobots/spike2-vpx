@@ -9,13 +9,19 @@ Status (2026-11-26):
   placeholder `Virtual DMD` window with the LCD kept on top of it.
 - **Phase 1 is done.** Setup saves the VPX folder, and the app picks DX9 or
   GL from it.
-- **Phase 2 is done** but not yet committed: a "Play in VR" checkbox, VR
-  runtime detection, and the INI keys per launch. The table plays in the
-  headset, but the LCD isn't there yet.
-- **Own controller identity is done**, also not yet committed:
-  `Spike2Vpx.Controller`, so the app no longer collides with Pinball Asset
-  Decryptor.
-- **Phase 3 is next:** the LCD in the headset.
+- **Phase 2 is done** (commit `16b651001`): a "Play in VR" checkbox, VR
+  runtime detection, and the INI keys per launch. The owner played a table
+  in the headset with it.
+- **Own controller identity is done** (same commit): `Spike2Vpx.Controller`,
+  so the app no longer collides with Pinball Asset Decryptor. With it, VPX
+  gets the keyboard by itself.
+- **Phase 3 is done:** the LCD in the headset, checked by the owner in the
+  headset on JAWS and GOTG.
+- **Phase 4's backbox fit is done:** DMD flashers fitted to 16:9 and made
+  opaque, placed per table from the map, and a VR-only LCD added to tables
+  without a VR room. The owner checked JAWS, GOTG, John Wick and Godzilla
+  in the headset. Still to do from Phase 4: the B2S backglass check, the
+  README VR section, and a "VR verified" column.
 
 See "Plan" below.
 
@@ -232,7 +238,7 @@ The system Python lacks `olefile`. Monitors: main 0,0 2560x1440; 2nd
   - VR: GL.
 - `vpx_version` takes an exe path.
 
-### Phase 2: "Play in VR" per launch (done, not yet committed)
+### Phase 2: "Play in VR" per launch (done, commit `16b651001`)
 
 - **UI.** A remembered "Play in VR" checkbox beside Play on the Games page
   (`settings["vr"]`).
@@ -282,10 +288,47 @@ The system Python lacks `olefile`. Monitors: main 0,0 2560x1440; 2nd
   LCD still opens wherever display.conf puts it, so it isn't in the headset
   yet. That is Phase 3.
 
-### Phase 3: the LCD in the headset (next)
+### Phase 3: the LCD in the headset (done)
 
 This builds the placeholder design confirmed on GOTG, all in the launcher
-(`play_spike2.py` / `vpx_lcd.py`).
+(`play_spike2.py` / `vpx_lcd.py`). What was built:
+
+- **Coordinates.** `padisplay.place()` gives the window's rect in Windows
+  coordinates (`padloading` uses it). `resolve()` writes the display.conf
+  line in X root coordinates (`x_origin`: the smallest monitor left/top).
+- **Target.** `vpx_lcd.vr_target`: 1360x768 (`VR_SIZE`), scaled to fit 90%
+  of the monitor, centred on the monitor display.conf names (the cabinet's
+  LCD screen, as `Player.play` has just written it), else the main one.
+- **`vpx_lcd.VrLcd`**, opened by `play_spike2.play(vr=True)` before the run
+  starts and closed after it stops:
+  - It writes a `mode=window border=0` line at the target, so
+    `fullscreen_target()` / `PAD_WINDOWS_LCD` stay off.
+  - It opens a `CaptureTarget`: the `Virtual DMD` window, on its own thread,
+    which keeps the LCD topmost over the target by z-order only.
+  - It puts the user's display.conf back byte for byte, or removes it if
+    there was none.
+- **INI line endings.** `padvpx.vpx_ini_set` now keeps the file's CRLF and
+  BOM. Before, the Phase 2 key put-back rewrote VPX's INI with LF endings,
+  with the same contents.
+- **Tests:** `tests/test_vr_lcd.py` (coordinates, target, VrLcd put-back,
+  launch order, a real Win32 capture window, INI endings).
+- **Live check without the headset** (2026-11-26, JAWS, `play_spike2.py
+  --vr`, owner's two-monitor PC):
+  - The capture window was at Windows (-1960, 804) 1360x768, centred on the
+    LCD screen.
+  - The LCD's window rect was exactly that plus WSLg's 32 px margin, so its
+    picture sat on the target. The LCD was in front at the centre and
+    corners, and 207 of 209 sample points over the target showed the game.
+  - VPX loaded Virtual Desktop's OpenXR runtime through OpenComposite. With
+    no headset streaming, OpenComposite showed "OpenComposite Error - info in
+    log" and VPX went back to its editor. That is expected without a headset.
+  - After VPX was closed, display.conf was back byte for byte, the rig was
+    released, and the VR INI keys had their earlier values.
+- **Headset check:** JAWS and GOTG from the app, by the owner (2026-11-27).
+  One-monitor PCs aren't checked yet; the target there is centred on the
+  main screen, under the LCD, over VPX's preview window.
+
+The original steps:
 
 1. **Fix the windowed-LCD coordinate bug first.**
    - `padisplay` writes the game window's x/y in Windows coordinates, but
@@ -328,13 +371,85 @@ This builds the placeholder design confirmed on GOTG, all in the launcher
   points. Those points can't be changed from the script.
   - Step 1: read the shape automatically. `vpxshadow` or the launcher finds
     the `IDMD` flasher and takes its corner points' bounding-box aspect.
-    Check how flasher rotation affects this.
-  - Default, no table edits: **letterbox in the capture.** Give the
-    placeholder the flasher's aspect and centre the 16:9 LCD inside it. The
-    bars come out black.
-  - Opt-in per table, as data: **reshape the flasher** to 16:9 in the
-    patched copy, keeping its centre. It fills the area, but check it
-    against the backbox art.
+    - Checked against VPX source (`flasher.cpp` around line 1157): the
+      texture is mapped over the drag points' x/y bounding box (image
+      alignment Wrap), then the flasher is rotated rigidly (`FROX` etc.,
+      about -84° to stand it up). So the shown aspect is that bounding box's
+      width/height, and rotation doesn't change it.
+    - Measured 2026-11-26 (read-only probe of the `(PAD)` tables: Flasher
+      items with `IDMD` set, `VCEN` of each `DPNT`):
+
+      | Table | DMD flashers | Aspect (16:9 = 1.778) |
+      |---|---|---|
+      | JAWS | `DMD` 585x149, `DMD002` 653x164 | 3.92, 3.99: classic 128x32 shape, hence the squash |
+      | GOTG | `DMD` 625x364 | 1.72: close to 16:9, which is why it looked right |
+      | John Wick | none | no DMD in the VR backbox at all |
+      | Godzilla | none | no DMD in the VR backbox at all |
+
+    - So some tables have **no `IDMD` flasher**, and the LCD can't appear in
+      their backbox without adding one (an opt-in table edit, as data), or
+      showing it some other way. Check the VR rooms of the other supported
+      tables the same way.
+    - What letterbox costs on JAWS: a 3.92:1 area on a 2560-wide screen is
+      at most about 2304x588. The 16:9 LCD inside it is 1045x588, so it fills
+      less than half the DMD's width in the headset, but isn't distorted.
+      Reshaping the flasher to 16:9 fills it, but grows it over the backbox
+      art.
+  - **Reshape (built, owner's choice 2026-11-27, Decision 5).**
+    `vrfit.backbox_in_place`, from `play_spike2.fit_for_vr` (both callers,
+    VR launches only, after `own_controller`):
+    - Each `IDMD` flasher keeps its width and gets a 16:9 height, anchored
+      at the bottom and growing upwards. Taller-than-16:9 ones (GOTG) get a
+      little shorter from the top. Within 1% it's left alone, so it runs
+      once.
+    - VPX places the flasher about its bounding-box centre (`RenderSetup`
+      recomputes it; the saved `FLAX`/`FLAY` are not used) at `FHEI`, then
+      RotateX (row vectors: y' = y cos a, z' = y sin a). So the centre moves
+      by -cos(a)·dh/2 in y and the height by -sin(a)·dh/2, which keeps the
+      bottom edge in place. A flasher turned about Y or Z is left as it is,
+      with a log line.
+    - GameItems aren't in the MAC: the streams are replaced via a `.tmp`,
+      verified and `os.replace`d, as `padmigrate` does.
+    - Checked on a scratch copy of JAWS: `DMD` 585x149 → 585x329, height
+      561 → 650.4; `DMD002` 653x164 → 653x368. Both verify, and the
+      bottom-edge world position matches to 0.1 units. A second run changes
+      nothing. Tests: `tests/test_vrfit.py`.
+    - First headset look (JAWS, 2026-11-27): the right size, but the art
+      behind showed through the picture. JAWS's `DMD` has ModulateVsAdd
+      (`MOVA`) 0.9 with additive blend. VPX blends a DMD flasher when `MOVA`
+      is under 1 and draws it solid at 1, which was hidden while it sat
+      on the backbox's black DMD window. So the fit also sets `MOVA` to 1,
+      on its own for tables already reshaped. GOTG's is 0.9 too (not
+      additive). `DMD002` is already 1.
+    - Second look: opaque and right, but a little off in size and place. So
+      a table's map can place each DMD flasher, as data: `"vr_backbox":
+      {"DMD": {"width": 570, "x": 463, "bottom": 490}}` (table units:
+      picture width, centre x, bottom edge height above the playfield; the
+      bottom edge keeps its depth). The values are absolute, so playing again
+      is a no-op, and a table already reshaped lands in the same place. The
+      automatic fit is the same function with the flasher's own values.
+      JAWS: the automatic fit's values (585, 463, 486.8) looked close. The
+      owner's try at 620, 438, 450 showed only the top of the picture. The
+      first version kept the bottom edge's depth, so 37 units lower stood the
+      whole picture 4 units further back. The backbox has a dark surface just
+      behind the DMD window at nearly the same tilt, and with two nearly
+      parallel surfaces a 4-unit shift moves their crossing line a long way,
+      so most of the picture was behind it. Now a move stays in the plane
+      the flasher stands in (`reshaped`; test: every corner on the author's
+      plane). The owner's JAWS was put back on that plane by hand
+      (scratchpad `jaws_repair.py`).
+    - Placing it from the table, not by eye: the dark surface is
+      `PinCab_DMD`, one textured quad 1.3-7.2 units behind the flasher's
+      plane. Its texture's black screen window (found by pixel scan),
+      mapped through the quad's corners into the flasher's plane, gives
+      the window: width 648, x 464, bottom 470.5, 383 tall (1.69:1). The
+      picture stays 16:9 and fills the window's full height (owner): JAWS's
+      map is width 681, x 464, bottom 470.5, overhanging the sides by about
+      16 units each.
+      The same method works for other tables whose cabinet has a DMD panel
+      texture; the probes are in the scratchpad (`prim_probe.py`,
+      `image_out.py`, `black_window.py`).
+  - Letterbox (black bars in the capture) was the alternative; not built.
   - Also check that every VR table's backbox uses VPX's DMD texture, given
     that FlexDMD/UltraDMD are stubbed (`vpxshadow.py:752`).
 - Check that `CapturePUP` shows the B2S backglass in VR backboxes. Its
@@ -343,7 +458,7 @@ This builds the placeholder design confirmed on GOTG, all in the launcher
   with an OpenXR runtime (Virtual Desktop and others), and the checkbox.
 - Add a "VR verified" column to the supported-tables list.
 
-### Own controller identity (done, not yet committed)
+### Own controller identity (done, commit `16b651001`)
 
 - **Why.** SPIKE 2 VPX is a fork of Pinball Asset Decryptor and kept its
   COM identity, `PAD.Controller`. Windows keeps one registration per name, and
@@ -390,19 +505,31 @@ This builds the placeholder design confirmed on GOTG, all in the launcher
 1. **VR INI keys:** set in the user's real INI for the launch and put back
    afterwards. With B2S disabled they go into the run's temp copy instead.
    (Owner agreed to Phase 2 on 2026-11-26.)
-2. **VR in the UI:** a remembered "Play in VR" checkbox beside Play. There's
-   no exe choice in the UI (owner, 2026-11-26).
+2. **VR in the UI:** a remembered "Enable VR" checkbox beside Play, shown
+   only when Play is; ticked, the button reads "Play in VR". There's no exe
+   choice in the UI (owner, 2026-11-26/27).
 3. **The controller stays unchanged for VR**: window work lives in the
    launcher (owner, 2026-11-26).
 4. **SPIKE 2 VPX gets its own controller identity**, moving old tables in
    place, so it can be installed beside Pinball Asset Decryptor (owner,
    2026-11-26).
+5. **Backbox DMDs are reshaped to 16:9**, anchored at the bottom and growing
+   upwards, in the table where it is, on VR Play (owner, 2026-11-27). A
+   table's map can place it (`vr_backbox`), always 16:9.
+6. **The capture target** stays the LCD's screen, else the main one,
+   centred, 1360x768 or smaller (owner, 2026-11-27).
+7. **Tables with no VR room get a large LCD** where the backbox would be,
+   so they're playable (owner, 2026-11-27). `vrfit.added_flasher`: a DMD
+   flasher `PadVrLcd`, 85% of the table's width, centred, bottom edge 470
+   up and 40 in front of the table's top, tilted -84°, saved hidden. A line
+   appended to the script (`If RenderingMode = 2 Then PadVrLcd.Visible =
+   True`) shows it in VR only. Added once, on VR Play, re-signed and
+   verified; a map's `vr_backbox` places it like any other. Checked on
+   copies of John Wick and Godzilla: one item added, the script otherwise
+   the same, both verify, and a second run does nothing. Not yet seen in
+   the headset.
 
-Still open, for Phase 3:
-
-- The default target monitor and size.
-- Letterbox or reshape as the default for tables like JAWS (recommendation:
-  letterbox).
+Still open: nothing.
 
 ## Notes for the next session
 

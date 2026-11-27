@@ -204,7 +204,7 @@ def test_play_in_vr_refuses_plainly_when_vr_is_unavailable(player, tmp_path, mon
     player.setup.vr_status = Mock(return_value=("", "No VR runtime found."))
     launch = Mock()
     monkeypatch.setattr(module.padlaunch, "Launch", launch)
-    with pytest.raises(ValueError, match="Play in VR is on, but VR is unavailable. No VR runtime found."):
+    with pytest.raises(ValueError, match="Enable VR is on, but VR is unavailable. No VR runtime found."):
         player.play(Game("godzilla_le", "card.raw", "table.vpx"), Mock())
     launch.assert_not_called()
 
@@ -283,7 +283,8 @@ def test_cabinet_uses_device_identity_and_preflights_backglass(player, tmp_path,
     layout = {"playfield": "play", "backglass": "glass", "lcd": "lcd"}
     player.save_layout(layout, screens)
     assert kit_save.call_args.args[0]["player"] == {"monitor": 1}
-    assert "x=-1280" in (tmp_path / "rig-board" / "display.conf").read_text()
+    # X root coordinates: the virtual desktop's top-left (-1280, -720) is X's 0,0.
+    assert "x=0 y=720 w=1280 h=720" in (tmp_path / "rig-board" / "display.conf").read_text()
     assert "Attach a .directb2s" in player.preflight(game)[0]
     source = tmp_path / "original.directb2s"
     source.write_text("<DirectB2SData/>")
@@ -334,7 +335,7 @@ def test_play_defaults_to_borderless_fullscreen_on_a_spare_display(player, tmp_p
 
     def start(*_, lighting_report, **__):
         assert "monitor=2 mode=fullscreen border=0" in path.read_text()
-        assert "x=-1280 y=0 w=1280 h=720 fs=1" in path.read_text()
+        assert "x=0 y=0 w=1280 h=720 fs=1" in path.read_text()      # X root coordinates
         lighting_report((), "Stern lighting skipped.")
         return 0
 

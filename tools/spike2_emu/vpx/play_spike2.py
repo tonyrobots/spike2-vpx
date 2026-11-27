@@ -61,6 +61,17 @@ def own_controller(table, script):
         raise RuntimeError(f"Could not move this table to the {controller_id.PROGID} controller. {exc}") from exc
 
 
+def fit_for_vr(table, title):
+    """Give the table's VR backbox DMD the LCD's 16:9 shape where it is, placed
+    as the title's map says (vrfit). Returns what was changed or found."""
+    import vrfit
+
+    try:
+        return vrfit.backbox_in_place(str(table), padlaunch.table_map(title))
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"Could not fit this table's VR backbox to the LCD. {exc}") from exc
+
+
 def resolve_vpx(exe, vr=False):
     """The player to launch: *exe* as given, else the one found. For VR, a
     player that cannot do VR stands for its folder, whose VR player is taken
@@ -266,6 +277,10 @@ def play(launch, exe, table, timeout, progress=None, *, overlap=False, disable_b
     if config:
         launch.lighting_topper = any(role == "topper" for _, role, _ in config[1])
     with ExitStack() as cleanup:
+        if vr:
+            # Before the run starts, and closed after it stops (callbacks run last
+            # first), so the LCD isn't moved back while the game is still up.
+            cleanup.callback(vpx_lcd.VrLcd(launch).close)
         cleanup.callback(launch.stop)
         command = [str(exe), "-ExtMinimized"]
         ini = None
@@ -420,6 +435,9 @@ def main():
         overlap = check_controller()
         for line in own_controller(table, embedded_script(table)):
             print(line, flush=True)
+        if args.vr:
+            for line in fit_for_vr(table, title):
+                print(line, flush=True)
 
         distro = args.distro or padlaunch.distro()
         card = args.card
