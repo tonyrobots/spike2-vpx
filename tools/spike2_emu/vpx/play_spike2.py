@@ -61,6 +61,17 @@ def own_controller(table, script):
         raise RuntimeError(f"Could not move this table to the {controller_id.PROGID} controller. {exc}") from exc
 
 
+def hide_score_display(table, script):
+    """Hide the table's own score display where it is (scoredisplay): the
+    Stern LCD replaces it. Returns what was changed."""
+    import scoredisplay
+
+    try:
+        return scoredisplay.hide_in_place(str(table), script)
+    except OSError as exc:
+        raise RuntimeError(f"Could not hide this table's own score display. {exc}") from exc
+
+
 def fit_for_vr(table, title):
     """Give the table's VR backbox DMD the LCD's 16:9 shape where it is, placed
     as the title's map says (vrfit). Returns what was changed or found."""
@@ -433,7 +444,8 @@ def main():
             raise ValueError(f"Invalid native SPIKE 2 game name in the map for {title}.")
         exe = resolve_vpx(args.vpx_exe, args.vr)
         overlap = check_controller()
-        for line in own_controller(table, embedded_script(table)):
+        script = embedded_script(table)
+        for line in own_controller(table, script) + hide_score_display(table, script):
             print(line, flush=True)
         if args.vr:
             for line in fit_for_vr(table, title):

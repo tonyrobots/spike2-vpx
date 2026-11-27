@@ -420,7 +420,7 @@ class Player:
         script = play_spike2.embedded_script(table)
         self.compatible(game, table, script)
         title = play_spike2.read_title(table, script)
-        for line in play_spike2.own_controller(table, script):
+        for line in play_spike2.own_controller(table, script) + play_spike2.hide_score_display(table, script):
             self.setup.log.info("%s", line)
         if vr:
             for line in play_spike2.fit_for_vr(table, title):

@@ -292,6 +292,13 @@
     "Bumper2",
     "Bumper3"
   ],
+  "vr_backbox": {
+    "_": ["VR: the VR-room download (VR_Room_JPs_Deadpool_1.8) has a DMD flasher whose spot is blocked by the backbox's",
+      "DMD frame, so the LCD covers the backglass art instead (PinCab_Backglass, x -146..1093), a little narrower than the",
+      "glass and resting just above the grey divider (its top face at 778). The other download has no DMD flasher and gets",
+      "the added LCD; this is skipped there."],
+    "DMD": {"width": 1180, "x": 473, "bottom": 780}
+  },
   "repatch": [
     {"old": "Sub swPlungerRest_UnHit : Controller.Switch(1064) = False : swPlungerRest_UnHit_orig : End Sub", "why": "the table's own rules ran at every launch: its skill shot, songs and light effects, over the machine's lights", "since": "PAD-1099: the plunger lane's own subs stay out of the way"},
     {"old": "Sub swPlungerRest_Hit : Controller.Switch(1064) = True : swPlungerRest_Hit_orig : End Sub", "why": "the table's own rules ran at every launch: its skill shot, songs and light effects, over the machine's lights", "since": "PAD-1099: the plunger lane's own subs stay out of the way"},

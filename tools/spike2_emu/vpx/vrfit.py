@@ -5,7 +5,7 @@ its drag points' bounding box (top at the smallest y), then rotates it by
 RotX about the box's centre and places it at that centre and the flasher's
 Height (flasher.cpp).
 
-Each DMD flasher is made 16:9 and opaque. By default it keeps its width and
+Each DMD flasher is made 16:9, opaque and visible. By default it keeps its width and
 bottom edge and grows upwards; a map's `vr_backbox` places it instead:
     "vr_backbox": {"<flasher name>": {"width": w, "x": x, "bottom": z}}
 in table units: picture width (height = width * 9/16), centre x, and bottom
@@ -104,9 +104,11 @@ def reshaped(points, rot_x, height, want=None, aspect=ASPECT):
 
 def fit(data, want=None):
     """(new GameItem stream, report line) for a DMD flasher that isn't 16:9,
-    isn't where *want* ({width, x, bottom}) puts it, or isn't opaque; else
-    None. Raises ValueError for one this can't reshape (turned about Y or Z).
-    Opaque: VPX blends a DMD flasher when ModulateVsAdd (MOVA) is under 1."""
+    isn't where *want* ({width, x, bottom}) puts it, isn't opaque, or is saved
+    hidden; else None. Raises ValueError for one this can't reshape (turned
+    about Y or Z). Opaque: VPX blends a DMD flasher when ModulateVsAdd (MOVA)
+    is under 1. Hidden: a VR room's DMD can be saved hidden with nothing to
+    show it; ADDED_NAME is saved hidden on purpose (SHOW_IN_VR shows it)."""
     found = dmd_flasher(data)
     if not found:
         return None
@@ -123,7 +125,9 @@ def fit(data, want=None):
     moved = any(abs(float(v) - now[k]) > NEAR for k, v in (want or {}).items())
     reshape = moved or abs(w / h / ASPECT - 1) > TOLERANCE
     blended = "MOVA" in fields and struct.unpack_from("<f", fields["MOVA"], 0)[0] < 1
-    if not reshape and not blended:
+    unseen = (name.lower() != ADDED_NAME.lower() and "FVIS" in fields
+              and struct.unpack_from("<i", fields["FVIS"], 0)[0] == 0)
+    if not reshape and not blended and not unseen:
         return None
     item, changes, todo = data, [], {}
     if reshape:
@@ -143,6 +147,9 @@ def fit(data, want=None):
     if blended:
         todo["MOVA"] = struct.pack("<f", 1.0)
         changes.append("made opaque")
+    if unseen:
+        todo["FVIS"] = struct.pack("<i", 1)
+        changes.append("made visible")
     item = vpxfile.set_fields(item, todo)
     return item, "VR backbox: %s %s" % (name, " and ".join(changes))
 
@@ -201,10 +208,10 @@ def placements(mapping):
 
 def backbox_in_place(path, mapping=None):
     """Fit every DMD flasher of the table at *path* where it is, placed as
-    *mapping*'s `vr_backbox` says, adding one to a table that has none.
-    Returns report lines, [] when there was nothing to do. Raises ValueError
-    for a map naming a flasher the table hasn't, and OSError when it can't be
-    written."""
+    *mapping*'s `vr_backbox` says, adding one to a table that has none. A map
+    entry for a flasher this table hasn't is skipped: one map can cover
+    several downloads of a title. Returns report lines, [] when there was
+    nothing to do. Raises OSError when it can't be written."""
     wants = placements(mapping)
     table = vpxfile.VpxTable(path)
     try:
@@ -234,10 +241,6 @@ def backbox_in_place(path, mapping=None):
                        "shown in VR only" % ADDED_NAME)
     finally:
         table.ole.close()
-    missing = set(wants) - names
-    if missing:
-        raise ValueError("vr_backbox names %s, which isn't a DMD in this table's backbox"
-                         % ", ".join(sorted(missing)))
     if not streams and not new_items:
         return rep
     tmp = path + ".vr-backbox.tmp"

@@ -500,6 +500,28 @@ The original steps:
   Pinball Asset Decryptor's hand-moved windowed player) is removed: in this
   app `player` belongs to the cabinet layout and `padvpx player`. The
   owner's bad value was removed by hand.
+- **The template's own score display floated left of the table**, in VR
+  and on the desktop (JAWS, JP Pro LE, Foo Fighters, Deadpool: JPSalas's
+  template). It's 42 flashers (`Digits = Array(digit001...)` and
+  `digitgrid`) at x about -1100 to -340 showing the old rules' text, which
+  the Stern game no longer drives. The script sets their image and
+  visibility, so `scoredisplay.hide_in_place`, on every Play (both
+  callers, after `own_controller`), gives them opacity 0 (FALP), which VPX
+  doesn't draw. Found from the script's own `Digits = Array`, so no
+  per-table data. Checked on copies of JAWS and JP Pro LE (42 hidden each,
+  verify, second run no-op) and GOTG (commented-out display, untouched).
+- **A VR room's DMD can be saved hidden with nothing to show it**
+  (VR_Room_JPs_Deadpool_1.8: flasher `DMD`, FVIS 0, and the script's own
+  `Sub DMD` takes that name, so it can't reach it). The fit now also makes
+  a hidden DMD flasher visible (not `PadVrLcd`, hidden on purpose). Checked
+  on a copy: made visible, verify, second run no-op; JAWS and GOTG
+  untouched.
+  - In the headset its spot was blocked by the backbox's DMD frame, so
+    `deadpool_pro`'s map puts it over the backglass art instead: 1180 wide
+    (the glass is 1239), x 473, its bottom at 780, just above the grey
+    divider (top face 778), as the owner asked. Both Deadpool downloads share that map, and the
+    other has no `DMD` flasher, so a `vr_backbox` entry for a flasher a
+    table hasn't is now skipped instead of refused.
 - **Jurassic Park 30th LE has no VR room or cabinet models**, so in VR only
   the playfield (and the added `PadVrLcd`) shows. A table matter; a VR-room
   version of the table is the fix.

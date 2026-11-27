@@ -18,9 +18,10 @@ WIDE = [(170.5, -44.6), (170.5, 103.7), (755.5, 104.6), (755.5, -44.6)]
 ROT, HEIGHT = -84.0, 561.0
 
 
-def flasher(points, rot_x=ROT, height=HEIGHT, dmd=1, rot_y=0.0, mova=1.0):
+def flasher(points, rot_x=ROT, height=HEIGHT, dmd=1, rot_y=0.0, mova=1.0, visible=1):
     rec = vpxfile.biff_record
-    out = struct.pack("<i", 20) + rec("MOVA", struct.pack("<f", mova))
+    out = struct.pack("<i", 20) + rec("MOVA", struct.pack("<f", mova)) + rec("FALP", struct.pack("<i", 100)) \
+        + rec("FVIS", struct.pack("<i", visible))
     out += rec("FHEI", struct.pack("<f", height)) + rec("FLAX", struct.pack("<f", 488.0)) \
         + rec("FLAY", struct.pack("<f", 38.2)) + rec("FROX", struct.pack("<f", rot_x)) \
         + rec("FROY", struct.pack("<f", rot_y)) + rec("FROZ", struct.pack("<f", 0.0)) \
@@ -100,6 +101,13 @@ class FitTest(unittest.TestCase):
         item, line = vrfit.fit(flasher(square, mova=0.9))
         self.assertEqual(line, "VR backbox: DMD made opaque")
         self.assertEqual(vrfit.dmd_flasher(item)[2], square)
+
+    def test_a_dmd_saved_hidden_is_made_visible(self):
+        square = [(0, 0), (0, 90), (160, 90), (160, 0)]
+        item, line = vrfit.fit(flasher(square, visible=0))
+        self.assertEqual(line, "VR backbox: DMD made visible")
+        self.assertEqual(struct.unpack("<i", vrfit.dmd_flasher(item)[1]["FVIS"])[0], 1)
+        self.assertIsNone(vrfit.fit(item))
 
     def test_a_map_places_it_in_its_plane_and_again_changes_nothing(self):
         for want in ({"width": 570.0, "x": 460.0, "bottom": 490.0},
